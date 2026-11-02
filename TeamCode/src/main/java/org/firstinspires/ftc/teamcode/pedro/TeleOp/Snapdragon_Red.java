@@ -1,0 +1,287 @@
+package org.firstinspires.ftc.teamcode.pedro.TeleOp;
+
+import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
+import com.qualcomm.hardware.limelightvision.LLResult;
+import com.qualcomm.hardware.limelightvision.LLResultTypes;
+import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.Range;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
+import org.firstinspires.ftc.robotcore.external.navigation.Position;
+
+import java.util.List;
+
+
+/*
+ * Gamepad 1 A: toggle Limelight aim-lock. While on, the robot turns itself to stay pointed
+ * at the middle of a BIOBUZZ CELL's 4 AprilTags (IDs 30-45, 4 per CELL) while you drive.
+ * Moving the right stick overrides it; let go and it re-locks onto the most centered CELL.
+ * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
+ */
+@TeleOp(name = "Snapdragon Red")
+public class Snapdragon_Red extends LinearOpMode {
+
+    private static final double TICKS_PER_REV = 28.0;
+
+    // ---- Aim-lock tuning ----
+    static final int    LIMELIGHT_PIPELINE = 0;   // pipeline set up for AprilTags
+    static final double AIM_GAIN           = 0.02; // turn power per degree of error
+    static final double AIM_MAX_TURN       = 0.5;
+    static final double AIM_DEADBAND       = 1.0;  // degrees
+    static final double LOST_TIMEOUT_SEC   = 1.0;  // then switch to the most centered CELL
+    static final double OVERRIDE_DEADBAND  = 0.1;  // right stick past this = driver override
+
+    // Turn needed per unit of strafe: strafe * STRAFE_TURN_INCHES / distance
+    static final double STRAFE_TURN_INCHES = 11.0;
+    static final double DEFAULT_DISTANCE_IN = 60.0;
+    static final double MIN_DISTANCE_IN     = 18.0;
+
+    static final int FIRST_TAG_ID = 30;
+    static final int LAST_TAG_ID  = 37;
+    static final int CELL_COUNT   = 4;
+
+    private int lockedCell = -1; // -1 = none yet
+    private final ElapsedTime lostTimer = new ElapsedTime();
+    private double targetTx;
+    private int targetTagCount;
+    private double targetDistance = DEFAULT_DISTANCE_IN;
+
+    @Override
+    public void runOpMode() throws InterruptedException {
+        // Drive motors
+        DcMotor frontLeftMotor = hardwareMap.get(DcMotor.class, "frontLeftMotor");
+        DcMotor backLeftMotor = hardwareMap.get(DcMotor.class, "backLeftMotor");
+        DcMotor frontRightMotor = hardwareMap.get(DcMotor.class, "frontRightMotor");
+        DcMotor backRightMotor = hardwareMap.get(DcMotor.class, "backRightMotor");
+
+        // Other motors and servos
+        DcMotor intake = hardwareMap.get(DcMotor.class, "intake");
+        DcMotorEx flyWheel = hardwareMap.get(DcMotorEx.class, "flyWheel");
+        Servo blocker = hardwareMap.get(Servo.class, "blocker");
+
+        // Pinpoint
+        GoBildaPinpointDriver pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
+        pinpoint.resetPosAndIMU();
+
+        // Motor directions
+        frontLeftMotor.setDirection(DcMotor.Direction.REVERSE);
+        backLeftMotor.setDirection(DcMotor.Direction.FORWARD);
+        frontRightMotor.setDirection(DcMotor.Direction.REVERSE);
+        backRightMotor.setDirection(DcMotor.Direction.FORWARD);
+
+        intake.setDirection(DcMotor.Direction.REVERSE);
+        flyWheel.setDirection(DcMotorEx.Direction.REVERSE);
+        blocker.setDirection(Servo.Direction.REVERSE);
+
+        // Motor modes
+        frontLeftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backLeftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        frontRightMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        backRightMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        intake.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        flyWheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
+
+        // blocker.setPosition(0.35);
+
+        // Limelight (optional)
+        Limelight3A limelight = hardwareMap.tryGet(Limelight3A.class, "limelight");
+        boolean cameraReady = limelight != null;
+        if (cameraReady) {
+            limelight.pipelineSwitch(LIMELIGHT_PIPELINE);
+            limelight.start();
+        }
+
+        telemetry.addLine("Pinpoint Field Drive Ready");
+        telemetry.addData("Limelight", cameraReady ? "ready - press A (gamepad 1) to aim-lock" : "not configured - aim-lock disabled");
+        telemetry.update();
+
+        waitForStart();
+
+        if (isStopRequested()) return;
+
+        boolean aimOn = false;
+        boolean aWasPressed = false;
+
+        while (opModeIsActive()) {
+            pinpoint.update();
+
+            // Driver controls
+            double y = -gamepad1.left_stick_y * 0.5;
+            double x = gamepad1.left_stick_x * 0.5;
+            double rx = gamepad1.right_stick_x * 0.5;
+
+            // Reset field heading
+            if (gamepad1.y) {
+                pinpoint.resetPosAndIMU();
+            }
+
+            // Pinpoint heading
+            double botHeading = pinpoint.getHeading(AngleUnit.RADIANS);
+
+            // Field-centric transformation
+            double rotX = x * Math.cos(-botHeading) - y * Math.sin(-botHeading);
+            double rotY = x * Math.sin(-botHeading) + y * Math.cos(-botHeading);
+
+            // Strafing compensation
+            rotX *= 1.1;
+
+            // Aim-lock toggle (only on the press, not while held)
+            boolean aPressed = gamepad1.a;
+            if (aPressed && !aWasPressed && cameraReady) {
+                aimOn = !aimOn;
+                lockedCell = -1;
+                lostTimer.reset();
+            }
+            aWasPressed = aPressed;
+
+            String aimStatus = cameraReady ? "OFF (press A)" : "no Limelight";
+            if (aimOn) {
+                if (Math.abs(gamepad1.right_stick_x) > OVERRIDE_DEADBAND) {
+                    // Driver override; re-lock on whatever is closest to the crosshair after release
+                    lockedCell = -1;
+                    aimStatus = "OVERRIDE";
+                } else {
+                    // Strafe right -> the CELL slides left -> turn left (negative).
+                    // rotX is the robot-relative strafe after the field-centric rotation.
+                    double strafeTurn = -rotX * STRAFE_TURN_INCHES / Math.max(targetDistance, MIN_DISTANCE_IN);
+
+                    int cell = findTarget(limelight.getLatestResult());
+                    if (cell >= 0) {
+                        lockedCell = cell;
+                        lostTimer.reset();
+                        double correction = Math.abs(targetTx) < AIM_DEADBAND ? 0
+                                : Range.clip(targetTx * AIM_GAIN, -AIM_MAX_TURN, AIM_MAX_TURN);
+                        rx = strafeTurn + correction;
+                        aimStatus = String.format("LOCKED cell %d (%.1f deg off, %d/4 tags, %.0f in)",
+                                lockedCell, targetTx, targetTagCount, targetDistance);
+                    } else if (lockedCell >= 0 && lostTimer.seconds() < LOST_TIMEOUT_SEC) {
+                        rx = strafeTurn;
+                        aimStatus = "LOCKED (tags blinked out)";
+                    } else {
+                        aimStatus = "SEARCHING";
+                    }
+                }
+            }
+
+            // Mecanum motor powers
+            double denominator = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1.0);
+            double frontLeftPower = (rotY + rotX + rx) / denominator;
+            double backLeftPower = (rotY - rotX + rx) / denominator;
+            double frontRightPower = (rotY - rotX - rx) / denominator;
+            double backRightPower = (rotY + rotX - rx) / denominator; 
+
+            frontLeftMotor.setPower(frontLeftPower);
+            backLeftMotor.setPower(backLeftPower);
+            frontRightMotor.setPower(frontRightPower);
+            backRightMotor.setPower(backRightPower);
+
+            // Intake
+            if ( gamepad1.left_bumper) {
+                intake.setPower(1);
+            } else if ( gamepad1.left_trigger > 0.1) {
+                intake.setPower(-1);
+            } else {
+                intake.setPower(0);
+            }
+
+            // //Flywheel
+            double rpm = 2500.0;
+            if (gamepad2.right_bumper && gamepad2.b) {
+                flyWheel.setVelocity(getTickSpeed(rpm + 500));
+            } else if (gamepad2.right_bumper ) {
+                flyWheel.setVelocity(getTickSpeed(rpm));
+            } else if (gamepad2.right_trigger > 0.1) {
+                flyWheel.setVelocity(getTickSpeed(-rpm));
+            } else {
+                flyWheel.setVelocity(300);
+        
+            }
+
+
+            // // Blocker
+            if (gamepad2.a) {
+                blocker.setPosition(0.23);
+            } else {
+                blocker.setPosition(0.19);
+            }
+
+            // Telemetry
+            telemetry.addData("Aim", aimStatus);
+            telemetry.addData("Heading", "%.2f degrees", pinpoint.getHeading(AngleUnit.DEGREES));
+            telemetry.addData("Pinpoint X", "%.2f", pinpoint.getPosX(DistanceUnit.INCH));
+            telemetry.addData("Pinpoint Y", "%.2f", pinpoint.getPosY(DistanceUnit.INCH));
+            telemetry.addData("FL Power", "%.2f", frontLeftPower);
+            telemetry.addData("BL Power", "%.2f", backLeftPower);
+            telemetry.addData("FR Power", "%.2f", frontRightPower);
+            telemetry.addData("BR Power", "%.2f", backRightPower);
+            // telemetry.addData("Intake Power", "%.2f", intake.getPower());
+            // telemetry.addData("Flywheel Velocity", "%.2f", flyWheel.getVelocity());
+            telemetry.update();
+        }
+
+        if (limelight != null) limelight.stop();
+    }
+
+    /**
+     * Groups visible CELL tags by CELL and picks one to aim at: the locked CELL if visible,
+     * otherwise the one closest to straight ahead. Sets targetTx / targetTagCount / targetDistance.
+     * Returns the CELL index, or -1 if none.
+     */
+    private int findTarget(LLResult result) {
+        if (result == null || !result.isValid()) return -1;
+
+        double[] txSum = new double[CELL_COUNT];
+        int[] count = new int[CELL_COUNT];
+        double[] distSum = new double[CELL_COUNT];
+        int[] distCount = new int[CELL_COUNT];
+
+        for (LLResultTypes.FiducialResult tag : result.getFiducialResults()) {
+            int id = tag.getFiducialId();
+            if (id < FIRST_TAG_ID || id > LAST_TAG_ID) continue;
+            int cell = (id - FIRST_TAG_ID) / 4;
+            txSum[cell] += tag.getTargetXDegrees();
+            count[cell]++;
+            double dist = distanceInches(tag);
+            if (!Double.isNaN(dist)) {
+                distSum[cell] += dist;
+                distCount[cell]++;
+            }
+        }
+
+        int best = -1;
+        for (int c = 0; c < CELL_COUNT; c++) {
+            if (count[c] == 0) continue;
+            if (c == lockedCell) { best = c; break; }
+            if (best == -1 || Math.abs(txSum[c] / count[c]) < Math.abs(txSum[best] / count[best])) best = c;
+        }
+        if (best == -1) return -1;
+
+        // Don't jump to a different CELL just because ours flickered out for a moment
+        if (lockedCell >= 0 && best != lockedCell && lostTimer.seconds() < LOST_TIMEOUT_SEC) return -1;
+
+        targetTx = txSum[best] / count[best];
+        targetTagCount = count[best];
+        if (distCount[best] > 0) targetDistance = distSum[best] / distCount[best];
+        return best;
+    }
+
+    /** Camera-to-tag distance in inches, or NaN if the Limelight isn't giving 3D poses. */
+    private static double distanceInches(LLResultTypes.FiducialResult tag) {
+        Pose3D pose = tag.getTargetPoseCameraSpace();
+        if (pose == null) return Double.NaN;
+        Position p = pose.getPosition().toUnit(DistanceUnit.INCH);
+        double dist = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+        return dist < 0.1 ? Double.NaN : dist;
+    }
+
+    public double getTickSpeed(double rpm) {
+        return rpm * TICKS_PER_REV / 60.0;
+    }
+}
