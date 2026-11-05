@@ -65,6 +65,7 @@ public class Snapdragon_Red extends LinearOpMode {
         DcMotor intake = hardwareMap.get(DcMotor.class, "intake");
         DcMotorEx flyWheel = hardwareMap.get(DcMotorEx.class, "flyWheel");
         Servo blocker = hardwareMap.get(Servo.class, "blocker");
+        Servo flowerBar = hardwareMap.get(Servo.class, "flowerBar");
 
         // Pinpoint
         GoBildaPinpointDriver pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
@@ -79,6 +80,7 @@ public class Snapdragon_Red extends LinearOpMode {
         intake.setDirection(DcMotor.Direction.REVERSE);
         flyWheel.setDirection(DcMotorEx.Direction.REVERSE);
         blocker.setDirection(Servo.Direction.REVERSE);
+        flowerBar.setDirection(Servo.Direction.REVERSE);
 
         // Motor modes
         frontLeftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
@@ -89,6 +91,7 @@ public class Snapdragon_Red extends LinearOpMode {
         flyWheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
 
         // blocker.setPosition(0.35);
+        
 
         // Limelight (optional)
         Limelight3A limelight = hardwareMap.tryGet(Limelight3A.class, "limelight");
@@ -211,6 +214,14 @@ public class Snapdragon_Red extends LinearOpMode {
             } else {
                 blocker.setPosition(0.19);
             }
+
+            // Flower Bar
+            if (gamepad2.b) {
+                flowerBar.setPosition(0.1);
+            } else {
+                flowerBar.setPosition(0);
+            }
+            
 
             // Telemetry
             telemetry.addData("Aim", aimStatus);
