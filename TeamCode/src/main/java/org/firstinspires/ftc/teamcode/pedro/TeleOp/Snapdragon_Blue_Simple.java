@@ -46,20 +46,32 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
     static final int FIRST_TAG_ID = 38;
     static final int LAST_TAG_ID  = 45;
 
-    static final double FLOWER_BAR_DOWN = 0.435;
+    static final double FLOWER_BAR_DOWN = 0.43;
     static final double FLOWER_BAR_UP   = 0.34;
 
-    static final double DRIVE_SPEED = 0.3;
-    static final double SHOOTER_RPM = 1000.0;
-    static final double SHOOTER_RPM_TOLERANCE = 50.0;
+    static final double DRIVE_SPEED = 0.45;
+    // Measured peak rpm (FL 5186, BL 5186, FR 5314, BR 5229) matched to the slowest motor
+    static final double DRIVE_SCALE_FL = 1.0;
+    static final double DRIVE_SCALE_BL = 1.0;
+    static final double DRIVE_SCALE_FR = 0.976;
+    static final double DRIVE_SCALE_BR = 0.992;
+    static final double SHOOTER_RPM = 2500.0;
+
+    // Flywheel encoder counts negative when driven forward, which makes the hub's velocity loop
+    // run away to full power. So it runs open loop: power = FLYWHEEL_KF * target ticks/s.
+    static final boolean FLYWHEEL_ENCODER_INVERTED = true;
+    static final double FLYWHEEL_FREE_SPEED_RPM = 5200.0;
+    static final double FLYWHEEL_KF = 1.0 / (FLYWHEEL_FREE_SPEED_RPM * TICKS_PER_REV / 60.0);
+    static final double FLYWHEEL_RPM_OFFSET = 550.0; // measured: flywheel runs under the commanded rpm, so command extra
+    static final double SHOOTER_RPM_TOLERANCE = 75.0;
     static final double BLOCKER_OPEN = 0.23;
     static final double BLOCKER_CLOSED = 0.204;
     static final double BLOCKER_OPEN_WAIT_SEC = 0.25; // make sure it is fully open before feeding
-    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 3.0; // feed anyway if the flywheel never reaches the target rpm
+    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 5.0; // feed anyway if the flywheel never reaches the target rpm
     static final double SHOOT_INTAKE_POWER = 0.5;
 
     // Reverse pulse on stick release to cancel momentum
-    static final double BRAKE_PULSE_POWER = 0.1;
+    static final double BRAKE_PULSE_POWER = 0.05;
     static final double BRAKE_PULSE_SEC = 0.25;
     static final double BRAKE_STOPPED_IN_PER_SEC = 2.0; // end the pulse early below this speed
     static final int CELL_COUNT   = 4;
@@ -107,7 +119,8 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
         frontRightMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         backRightMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         intake.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        flywheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
+        flywheel.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
+        flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
         // Brake when there is no drive input so the robot doesn't coast
         frontLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -152,6 +165,13 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
             double y = -gamepad1.left_stick_y * DRIVE_SPEED;
             double x = gamepad1.left_stick_x * DRIVE_SPEED;
             double rx = gamepad1.right_stick_x * DRIVE_SPEED;
+
+            // Bumpers strafe: right bumper = left, left bumper = right
+            if (gamepad1.right_bumper) {
+                x = -DRIVE_SPEED;
+            } else if (gamepad1.left_bumper) {
+                x = DRIVE_SPEED;
+            }
 
             // Reset field heading
             if (gamepad1.y) {
@@ -205,10 +225,10 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
 
             // Mecanum motor powers
             double denominator = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1.0);
-            double frontLeftPower = ((rotY + rotX + rx) / denominator) * 1.75;
-            double backLeftPower = ((rotY - rotX + rx) / denominator) * 1.5;
-            double frontRightPower = (rotY - rotX - rx) / denominator;
-            double backRightPower = (rotY + rotX - rx) / denominator; 
+            double frontLeftPower = ((rotY + rotX + rx) / denominator) * DRIVE_SCALE_FL;
+            double backLeftPower = ((rotY - rotX + rx) / denominator) * DRIVE_SCALE_BL;
+            double frontRightPower = ((rotY - rotX - rx) / denominator) * DRIVE_SCALE_FR;
+            double backRightPower = ((rotY + rotX - rx) / denominator) * DRIVE_SCALE_BR;
 
             // Short reverse pulse when the sticks are released, to cancel momentum
             boolean hasInput = Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx) > 0.01;
@@ -250,7 +270,7 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
             }
             rbWasPressed = rbPressed;
 
-            double flywheelRpm = Math.abs(flywheel.getVelocity()) * 60.0 / TICKS_PER_REV;
+            double flywheelRpm = flywheel.getVelocity() * (FLYWHEEL_ENCODER_INVERTED ? -1 : 1) * 60.0 / TICKS_PER_REV;
             if (shooterState == ShooterState.SPINNING_UP
                     && (Math.abs(flywheelRpm - SHOOTER_RPM) <= SHOOTER_RPM_TOLERANCE
                         || blockerTimer.seconds() >= SHOOTER_SPINUP_TIMEOUT_SEC)) {
@@ -274,11 +294,11 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
             // //Flywheel
             double rpm = 2500.0;
             if (shooterState != ShooterState.OFF) {
-                flywheel.setVelocity(getTickSpeed(SHOOTER_RPM));
+                flywheel.setPower(flywheelPower(SHOOTER_RPM + FLYWHEEL_RPM_OFFSET));
             } else if (gamepad2.right_trigger > 0.1) {
-                flywheel.setVelocity(getTickSpeed(-rpm));
+                flywheel.setPower(-flywheelPower(rpm));
             } else {
-                flywheel.setVelocity(0);
+                flywheel.setPower(0);
         
             }
 
@@ -308,7 +328,7 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
             // telemetry.addData("Intake Power", "%.2f", intake.getPower());
             telemetry.addData("Shooter", shooterState);
             telemetry.addData("Flywheel RPM", "%.0f (target %.0f)", flywheelRpm, SHOOTER_RPM);
-            telemetry.addData("Flywheel raw", "%.0f ticks/s (target %.0f) | power %.2f", flywheel.getVelocity(), getTickSpeed(SHOOTER_RPM), flywheel.getPower());
+            telemetry.addData("Flywheel raw", "%.0f ticks/s (target %.0f) | power %.2f", flywheelRpm * TICKS_PER_REV / 60.0, getTickSpeed(SHOOTER_RPM), flywheel.getPower());
             telemetry.addData("Flower bar", flowerBarUp ? "UP" : "DOWN");
             telemetry.update();
         }
@@ -371,6 +391,11 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
     /** Opposite-direction pulse for one wheel, never stronger than the power it was running at. */
     private static double brakePower(double lastPower) {
         return -Math.signum(lastPower) * Math.min(BRAKE_PULSE_POWER, Math.abs(lastPower));
+    }
+
+    /** Open-loop flywheel power for a commanded rpm. */
+    private static double flywheelPower(double rpm) {
+        return Range.clip(FLYWHEEL_KF * rpm * TICKS_PER_REV / 60.0, 0, 1);
     }
 
     public double getTickSpeed(double rpm) {
