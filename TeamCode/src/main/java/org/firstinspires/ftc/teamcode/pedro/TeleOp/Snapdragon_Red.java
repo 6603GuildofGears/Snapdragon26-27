@@ -4,6 +4,7 @@ import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -25,7 +26,8 @@ import java.util.List;
  * Moving the right stick overrides it; let go and it re-locks onto the most centered CELL.
  * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
  */
-@TeleOp(name = "Snapdragon Red")
+@Disabled
+@TeleOp(name = "Snapdragon Red-field")
 public class Snapdragon_Red extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;
@@ -45,6 +47,23 @@ public class Snapdragon_Red extends LinearOpMode {
 
     static final int FIRST_TAG_ID = 30;
     static final int LAST_TAG_ID  = 37;
+
+    static final double FLOWER_BAR_DOWN = 0.435;
+    static final double FLOWER_BAR_UP   = 0.35;
+
+    static final double DRIVE_SPEED = 0.3;
+    static final double SHOOTER_RPM = 1000.0;
+    static final double SHOOTER_RPM_TOLERANCE = 50.0;
+    static final double BLOCKER_OPEN = 0.23;
+    static final double BLOCKER_CLOSED = 0.204;
+    static final double BLOCKER_OPEN_WAIT_SEC = 0.25; // make sure it is fully open before feeding
+    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 3.0; // feed anyway if the flywheel never reaches the target rpm
+    static final double SHOOT_INTAKE_POWER = 0.5;
+
+    // Reverse pulse on stick release to cancel momentum
+    static final double BRAKE_PULSE_POWER = 0.1;
+    static final double BRAKE_PULSE_SEC = 0.25;
+    static final double BRAKE_STOPPED_IN_PER_SEC = 2.0; // end the pulse early below this speed
     static final int CELL_COUNT   = 4;
 
     private int lockedCell = -1; // -1 = none yet
@@ -52,6 +71,8 @@ public class Snapdragon_Red extends LinearOpMode {
     private double targetTx;
     private int targetTagCount;
     private double targetDistance = DEFAULT_DISTANCE_IN;
+
+    private enum ShooterState { OFF, SPINNING_UP, OPENING_BLOCKER, FEEDING }
 
     @Override
     public void runOpMode() throws InterruptedException {
@@ -63,7 +84,7 @@ public class Snapdragon_Red extends LinearOpMode {
 
         // Other motors and servos
         DcMotor intake = hardwareMap.get(DcMotor.class, "intake");
-        DcMotorEx flyWheel = hardwareMap.get(DcMotorEx.class, "flyWheel");
+        DcMotorEx flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
         Servo blocker = hardwareMap.get(Servo.class, "blocker");
         Servo flowerBar = hardwareMap.get(Servo.class, "flowerBar");
 
@@ -73,12 +94,12 @@ public class Snapdragon_Red extends LinearOpMode {
 
         // Motor directions
         frontLeftMotor.setDirection(DcMotor.Direction.REVERSE);
-        backLeftMotor.setDirection(DcMotor.Direction.FORWARD);
-        frontRightMotor.setDirection(DcMotor.Direction.REVERSE);
-        backRightMotor.setDirection(DcMotor.Direction.FORWARD);
+        backLeftMotor.setDirection(DcMotor.Direction.REVERSE);
+        frontRightMotor.setDirection(DcMotor.Direction.FORWARD);
+        backRightMotor.setDirection(DcMotor.Direction.REVERSE);
 
-        intake.setDirection(DcMotor.Direction.REVERSE);
-        flyWheel.setDirection(DcMotorEx.Direction.REVERSE);
+        intake.setDirection(DcMotor.Direction.FORWARD);
+        flywheel.setDirection(DcMotorEx.Direction.FORWARD);
         blocker.setDirection(Servo.Direction.REVERSE);
         flowerBar.setDirection(Servo.Direction.REVERSE);
 
@@ -88,7 +109,13 @@ public class Snapdragon_Red extends LinearOpMode {
         frontRightMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         backRightMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         intake.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        flyWheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
+        flywheel.setMode(DcMotorEx.RunMode.RUN_USING_ENCODER);
+
+        // Brake when there is no drive input so the robot doesn't coast
+        frontLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backLeftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        frontRightMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backRightMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         // blocker.setPosition(0.35);
         
@@ -111,14 +138,23 @@ public class Snapdragon_Red extends LinearOpMode {
 
         boolean aimOn = false;
         boolean aWasPressed = false;
+        boolean bWasPressed = false;
+        boolean rbWasPressed = false;
+        boolean flowerBarUp = true;
+        ShooterState shooterState = ShooterState.OFF;
+        ElapsedTime blockerTimer = new ElapsedTime();
+        ElapsedTime brakeTimer = new ElapsedTime();
+        double[] lastPowers = new double[4]; // FL, BL, FR, BR
+        boolean wasMoving = false;
+        boolean braking = false;
 
         while (opModeIsActive()) {
             pinpoint.update();
 
             // Driver controls
-            double y = -gamepad1.left_stick_y * 0.5;
-            double x = gamepad1.left_stick_x * 0.5;
-            double rx = gamepad1.right_stick_x * 0.5;
+            double y = -gamepad1.left_stick_y * DRIVE_SPEED;
+            double x = gamepad1.left_stick_x * DRIVE_SPEED;
+            double rx = gamepad1.right_stick_x * DRIVE_SPEED;
 
             // Reset field heading
             if (gamepad1.y) {
@@ -175,20 +211,67 @@ public class Snapdragon_Red extends LinearOpMode {
 
             // Mecanum motor powers
             double denominator = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1.0);
-            double frontLeftPower = (rotY + rotX + rx) / denominator;
-            double backLeftPower = (rotY - rotX + rx) / denominator;
+            double frontLeftPower = ((rotY + rotX + rx) / denominator) * 1.75;
+            double backLeftPower = ((rotY - rotX + rx) / denominator) * 1.5;
             double frontRightPower = (rotY - rotX - rx) / denominator;
             double backRightPower = (rotY + rotX - rx) / denominator; 
+
+            // Short reverse pulse when the sticks are released, to cancel momentum
+            boolean hasInput = Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx) > 0.01;
+            if (hasInput) {
+                wasMoving = true;
+                braking = false;
+                lastPowers[0] = frontLeftPower;
+                lastPowers[1] = backLeftPower;
+                lastPowers[2] = frontRightPower;
+                lastPowers[3] = backRightPower;
+            } else {
+                if (wasMoving) {
+                    wasMoving = false;
+                    braking = true;
+                    brakeTimer.reset();
+                }
+                double speed = Math.hypot(pinpoint.getVelX(DistanceUnit.INCH), pinpoint.getVelY(DistanceUnit.INCH));
+                if (braking && (brakeTimer.seconds() >= BRAKE_PULSE_SEC || speed < BRAKE_STOPPED_IN_PER_SEC)) {
+                    braking = false;
+                }
+                if (braking) {
+                    frontLeftPower = brakePower(lastPowers[0]);
+                    backLeftPower = brakePower(lastPowers[1]);
+                    frontRightPower = brakePower(lastPowers[2]);
+                    backRightPower = brakePower(lastPowers[3]);
+                }
+            }
 
             frontLeftMotor.setPower(frontLeftPower);
             backLeftMotor.setPower(backLeftPower);
             frontRightMotor.setPower(frontRightPower);
             backRightMotor.setPower(backRightPower);
 
+            // Shooter sequence: right bumper click starts it, click again stops it
+            boolean rbPressed = gamepad2.right_bumper;
+            if (rbPressed && !rbWasPressed) {
+                shooterState = shooterState == ShooterState.OFF ? ShooterState.SPINNING_UP : ShooterState.OFF;
+                blockerTimer.reset();
+            }
+            rbWasPressed = rbPressed;
+
+            double flywheelRpm = Math.abs(flywheel.getVelocity()) * 60.0 / TICKS_PER_REV;
+            if (shooterState == ShooterState.SPINNING_UP
+                    && (Math.abs(flywheelRpm - SHOOTER_RPM) <= SHOOTER_RPM_TOLERANCE
+                        || blockerTimer.seconds() >= SHOOTER_SPINUP_TIMEOUT_SEC)) {
+                shooterState = ShooterState.OPENING_BLOCKER;
+                blockerTimer.reset();
+            } else if (shooterState == ShooterState.OPENING_BLOCKER && blockerTimer.seconds() >= BLOCKER_OPEN_WAIT_SEC) {
+                shooterState = ShooterState.FEEDING;
+            }
+
             // Intake
-            if ( gamepad1.left_bumper) {
+            if (shooterState == ShooterState.FEEDING) {
+                intake.setPower(SHOOT_INTAKE_POWER);
+            } else if (gamepad1.right_trigger > 0.1 || gamepad2.left_bumper) {
                 intake.setPower(1);
-            } else if ( gamepad1.left_trigger > 0.1) {
+            } else if (gamepad1.left_trigger > 0.1 || gamepad2.left_trigger > 0.1) {
                 intake.setPower(-1);
             } else {
                 intake.setPower(0);
@@ -196,31 +279,29 @@ public class Snapdragon_Red extends LinearOpMode {
 
             // //Flywheel
             double rpm = 2500.0;
-            if (gamepad2.right_bumper && gamepad2.b) {
-                flyWheel.setVelocity(getTickSpeed(rpm + 500));
-            } else if (gamepad2.right_bumper ) {
-                flyWheel.setVelocity(getTickSpeed(rpm));
+            if (shooterState != ShooterState.OFF) {
+                flywheel.setVelocity(getTickSpeed(SHOOTER_RPM));
             } else if (gamepad2.right_trigger > 0.1) {
-                flyWheel.setVelocity(getTickSpeed(-rpm));
+                flywheel.setVelocity(getTickSpeed(-rpm));
             } else {
-                flyWheel.setVelocity(300);
+                flywheel.setVelocity(0);
         
             }
 
 
             // // Blocker
-            if (gamepad2.a) {
-                blocker.setPosition(0.23);
-            } else {
-                blocker.setPosition(0.19);
-            }
+            boolean blockerOpen = gamepad2.a
+                    || shooterState == ShooterState.OPENING_BLOCKER
+                    || shooterState == ShooterState.FEEDING;
+            blocker.setPosition(blockerOpen ? BLOCKER_OPEN : BLOCKER_CLOSED);
 
             // Flower Bar
-            if (gamepad2.b) {
-                flowerBar.setPosition(0.1);
-            } else {
-                flowerBar.setPosition(0);
+            boolean bPressed = gamepad2.b;
+            if (bPressed && !bWasPressed) {
+                flowerBarUp = !flowerBarUp;
             }
+            bWasPressed = bPressed;
+            flowerBar.setPosition(flowerBarUp ? FLOWER_BAR_UP : FLOWER_BAR_DOWN);
             
 
             // Telemetry
@@ -233,7 +314,10 @@ public class Snapdragon_Red extends LinearOpMode {
             telemetry.addData("FR Power", "%.2f", frontRightPower);
             telemetry.addData("BR Power", "%.2f", backRightPower);
             // telemetry.addData("Intake Power", "%.2f", intake.getPower());
-            // telemetry.addData("Flywheel Velocity", "%.2f", flyWheel.getVelocity());
+            telemetry.addData("Shooter", shooterState);
+            telemetry.addData("Flywheel RPM", "%.0f (target %.0f)", flywheelRpm, SHOOTER_RPM);
+            telemetry.addData("Flywheel raw", "%.0f ticks/s (target %.0f) | power %.2f", flywheel.getVelocity(), getTickSpeed(SHOOTER_RPM), flywheel.getPower());
+            telemetry.addData("Flower bar", flowerBarUp ? "UP" : "DOWN");
             telemetry.update();
         }
 
@@ -290,6 +374,11 @@ public class Snapdragon_Red extends LinearOpMode {
         Position p = pose.getPosition().toUnit(DistanceUnit.INCH);
         double dist = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
         return dist < 0.1 ? Double.NaN : dist;
+    }
+
+    /** Opposite-direction pulse for one wheel, never stronger than the power it was running at. */
+    private static double brakePower(double lastPower) {
+        return -Math.signum(lastPower) * Math.min(BRAKE_PULSE_POWER, Math.abs(lastPower));
     }
 
     public double getTickSpeed(double rpm) {
