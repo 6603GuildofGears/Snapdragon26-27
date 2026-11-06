@@ -4,7 +4,6 @@ import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -26,7 +25,6 @@ import java.util.List;
  * Moving the right stick overrides it; let go and it re-locks onto the most centered CELL.
  * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
  */
-@Disabled
 @TeleOp(name = "Snapdragon Red-field")
 public class Snapdragon_Red extends LinearOpMode {
 
@@ -52,6 +50,11 @@ public class Snapdragon_Red extends LinearOpMode {
     static final double FLOWER_BAR_UP   = 0.35;
 
     static final double DRIVE_SPEED = 0.45;
+    // Measured peak rpm (FL 5186, BL 5186, FR 5314, BR 5229) matched to the slowest motor
+    static final double DRIVE_SCALE_FL = 1.0;
+    static final double DRIVE_SCALE_BL = 1.0;
+    static final double DRIVE_SCALE_FR = 0.976;
+    static final double DRIVE_SCALE_BR = 0.992;
     static final double SHOOTER_RPM = 2500.0;
 
     // Flywheel encoder counts negative when driven forward, which makes the hub's velocity loop
@@ -61,11 +64,15 @@ public class Snapdragon_Red extends LinearOpMode {
     static final double FLYWHEEL_KF = 1.0 / (FLYWHEEL_FREE_SPEED_RPM * TICKS_PER_REV / 60.0);
     static final double FLYWHEEL_RPM_OFFSET = 550.0; // measured: flywheel runs under the commanded rpm, so command extra
     static final double SHOOTER_RPM_TOLERANCE = 75.0;
+    // Once the shooter reaches its rpm, ramp up extra rpm to make up for the flywheel bogging down
+    static final double SHOOTER_LOAD_BOOST_RPM = 400.0;
+    static final double SHOOTER_LOAD_BOOST_RAMP_SEC = 1.0;
+    static final double SHOOTER_AUTO_OFF_SEC = 7.0; // shooter turns itself off this long after it was started
     static final double BLOCKER_OPEN = 0.23;
     static final double BLOCKER_CLOSED = 0.204;
     static final double BLOCKER_OPEN_WAIT_SEC = 0.25; // make sure it is fully open before feeding
     static final double SHOOTER_SPINUP_TIMEOUT_SEC = 5.0; // feed anyway if the flywheel never reaches the target rpm
-    static final double SHOOT_INTAKE_POWER = 0.5;
+    static final double SHOOT_INTAKE_POWER = 0.25;
 
     // Reverse pulse on stick release to cancel momentum
     static final double BRAKE_PULSE_POWER = 0.05;
@@ -151,6 +158,8 @@ public class Snapdragon_Red extends LinearOpMode {
         boolean flowerBarUp = true;
         ShooterState shooterState = ShooterState.OFF;
         ElapsedTime blockerTimer = new ElapsedTime();
+        ElapsedTime boostTimer = new ElapsedTime();
+        ElapsedTime shooterTimer = new ElapsedTime();
         ElapsedTime brakeTimer = new ElapsedTime();
         double[] lastPowers = new double[4]; // FL, BL, FR, BR
         boolean wasMoving = false;
@@ -226,10 +235,10 @@ public class Snapdragon_Red extends LinearOpMode {
 
             // Mecanum motor powers
             double denominator = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1.0);
-            double frontLeftPower = ((rotY + rotX + rx) / denominator) * 1.75;
-            double backLeftPower = ((rotY - rotX + rx) / denominator) * 1.5;
-            double frontRightPower = (rotY - rotX - rx) / denominator;
-            double backRightPower = (rotY + rotX - rx) / denominator; 
+            double frontLeftPower = ((rotY + rotX + rx) / denominator) * DRIVE_SCALE_FL;
+            double backLeftPower = ((rotY - rotX + rx) / denominator) * DRIVE_SCALE_BL;
+            double frontRightPower = ((rotY - rotX - rx) / denominator) * DRIVE_SCALE_FR;
+            double backRightPower = ((rotY + rotX - rx) / denominator) * DRIVE_SCALE_BR;
 
             // Short reverse pulse when the sticks are released, to cancel momentum
             boolean hasInput = Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx) > 0.01;
@@ -267,15 +276,30 @@ public class Snapdragon_Red extends LinearOpMode {
             boolean rbPressed = gamepad2.right_bumper;
             if (rbPressed && !rbWasPressed) {
                 shooterState = shooterState == ShooterState.OFF ? ShooterState.SPINNING_UP : ShooterState.OFF;
+                shooterTimer.reset();
+                // Aim-lock follows the shooter: on when shooting starts, off when it stops
+                if (cameraReady) {
+                    aimOn = shooterState != ShooterState.OFF;
+                    lockedCell = -1;
+                    lostTimer.reset();
+                }
                 blockerTimer.reset();
             }
             rbWasPressed = rbPressed;
+            if (shooterState != ShooterState.OFF && shooterTimer.seconds() >= SHOOTER_AUTO_OFF_SEC) {
+                shooterState = ShooterState.OFF;
+                if (cameraReady) {
+                    aimOn = false;
+                    lockedCell = -1;
+                }
+            }
 
             double flywheelRpm = flywheel.getVelocity() * (FLYWHEEL_ENCODER_INVERTED ? -1 : 1) * 60.0 / TICKS_PER_REV;
             if (shooterState == ShooterState.SPINNING_UP
                     && (Math.abs(flywheelRpm - SHOOTER_RPM) <= SHOOTER_RPM_TOLERANCE
                         || blockerTimer.seconds() >= SHOOTER_SPINUP_TIMEOUT_SEC)) {
                 shooterState = ShooterState.OPENING_BLOCKER;
+                boostTimer.reset();
                 blockerTimer.reset();
             } else if (shooterState == ShooterState.OPENING_BLOCKER && blockerTimer.seconds() >= BLOCKER_OPEN_WAIT_SEC) {
                 shooterState = ShooterState.FEEDING;
@@ -287,7 +311,7 @@ public class Snapdragon_Red extends LinearOpMode {
             } else if (gamepad1.right_trigger > 0.1 || gamepad2.left_bumper) {
                 intake.setPower(1);
             } else if (gamepad1.left_trigger > 0.1 || gamepad2.left_trigger > 0.1) {
-                intake.setPower(-1);
+                intake.setPower(-0.25);
             } else {
                 intake.setPower(0);
             }
@@ -295,7 +319,9 @@ public class Snapdragon_Red extends LinearOpMode {
             // //Flywheel
             double rpm = 2500.0;
             if (shooterState != ShooterState.OFF) {
-                flywheel.setPower(flywheelPower(SHOOTER_RPM + FLYWHEEL_RPM_OFFSET));
+                double loadBoost = shooterState == ShooterState.OPENING_BLOCKER || shooterState == ShooterState.FEEDING
+                        ? SHOOTER_LOAD_BOOST_RPM * Math.min(1.0, boostTimer.seconds() / SHOOTER_LOAD_BOOST_RAMP_SEC) : 0;
+                flywheel.setPower(flywheelPower(SHOOTER_RPM + FLYWHEEL_RPM_OFFSET + loadBoost));
             } else if (gamepad2.right_trigger > 0.1) {
                 flywheel.setPower(-flywheelPower(rpm));
             } else {
