@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.pedro.TeleOp;
 
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
@@ -16,6 +17,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.robotcore.external.navigation.Position;
 
+
 import java.util.List;
 
 
@@ -25,6 +27,7 @@ import java.util.List;
  * Moving the right stick overrides it; let go and it re-locks onto the most centered CELL.
  * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
  */
+@Disabled
 @TeleOp(name = "Snapdragon Red-field")
 public class Snapdragon_Red extends LinearOpMode {
 
