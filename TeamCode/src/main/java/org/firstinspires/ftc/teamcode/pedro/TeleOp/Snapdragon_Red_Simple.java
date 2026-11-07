@@ -63,16 +63,23 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
     static final double FLYWHEEL_FREE_SPEED_RPM = 5200.0;
     static final double FLYWHEEL_KF = 1.0 / (FLYWHEEL_FREE_SPEED_RPM * TICKS_PER_REV / 60.0);
     static final double FLYWHEEL_RPM_OFFSET = 550.0; // measured: flywheel runs under the commanded rpm, so command extra
-    static final double SHOOTER_RPM_TOLERANCE = 75.0;
-    // Once the shooter reaches its rpm, ramp up extra rpm to make up for the flywheel bogging down
-    static final double SHOOTER_LOAD_BOOST_RPM = 400.0;
-    static final double SHOOTER_LOAD_BOOST_RAMP_SEC = 1.0;
-    static final double SHOOTER_AUTO_OFF_SEC = 7.0; // shooter turns itself off this long after it was started
+    static final double SHOOTER_READY_MARGIN_RPM = 200.0; // sequence starts once the measured rpm reaches target - this
+    static final double SHOOTER_RPM_STEP = 25.0;           // dpad rpm adjustment
+    // Extra rpm ramped in once at speed to make up for bogging down; 0 = off (the burst sequence doesn't use it)
+    static final double SHOOTER_LOAD_BOOST_RPM = 0.0;
+    static final double SHOOTER_LOAD_BOOST_RAMP_SEC = 2.5;
+    static final double SHOOTER_AUTO_OFF_SEC = 15.0; // safety: shooter turns itself off this long after it was started
     static final double BLOCKER_OPEN = 0.23;
     static final double BLOCKER_CLOSED = 0.204;
     static final double BLOCKER_OPEN_WAIT_SEC = 0.25; // make sure it is fully open before feeding
-    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 5.0; // feed anyway if the flywheel never reaches the target rpm
-    static final double SHOOT_INTAKE_POWER = 0.25;
+    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.0; // start anyway if the flywheel never reaches the ready rpm
+
+    // Burst feed sequence: short bursts with gaps, then one long burst
+    static final double BURST_INTAKE_POWER = 0.5;
+    static final double BURST_SEC = 0.2;
+    static final double BURST_GAP_SEC = 0.5;
+    static final int SHORT_BURSTS = 3;
+    static final double LONG_BURST_SEC = 3.0;
 
     // Reverse pulse on stick release to cancel momentum
     static final double BRAKE_PULSE_POWER = 0.05;
@@ -86,7 +93,7 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
     private int targetTagCount;
     private double targetDistance = DEFAULT_DISTANCE_IN;
 
-    private enum ShooterState { OFF, SPINNING_UP, OPENING_BLOCKER, FEEDING }
+    private enum ShooterState { OFF, SPINNING_UP, OPENING_BLOCKER, BURST, GAP, LONG_BURST }
 
     @Override
     public void runOpMode() throws InterruptedException {
@@ -159,6 +166,10 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
         ShooterState shooterState = ShooterState.OFF;
         ElapsedTime blockerTimer = new ElapsedTime();
         ElapsedTime boostTimer = new ElapsedTime();
+        double shooterRpm = SHOOTER_RPM;
+        int shortBurstsDone = 0;
+        boolean rpmUpWasPressed = false;
+        boolean rpmDownWasPressed = false;
         ElapsedTime shooterTimer = new ElapsedTime();
         ElapsedTime brakeTimer = new ElapsedTime();
         double[] lastPowers = new double[4]; // FL, BL, FR, BR
@@ -172,6 +183,18 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
             double y = -gamepad1.left_stick_y * DRIVE_SPEED;
             double x = gamepad1.left_stick_x * DRIVE_SPEED;
             double rx = gamepad1.right_stick_x * DRIVE_SPEED;
+
+            // Dpad drives inverse robot-relative: up = back, down = forward, left = strafe right, right = strafe left
+            if (gamepad1.dpad_up) {
+                y = -DRIVE_SPEED;
+            } else if (gamepad1.dpad_down) {
+                y = DRIVE_SPEED;
+            }
+            if (gamepad1.dpad_left) {
+                x = DRIVE_SPEED;
+            } else if (gamepad1.dpad_right) {
+                x = -DRIVE_SPEED;
+            }
 
             // Bumpers strafe: right bumper = left, left bumper = right
             if (gamepad1.right_bumper) {
@@ -269,6 +292,15 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
             frontRightMotor.setPower(frontRightPower);
             backRightMotor.setPower(backRightPower);
 
+            // Dpad up/down adjusts the shooter rpm
+            boolean rpmUp = gamepad2.dpad_up;
+            boolean rpmDown = gamepad2.dpad_down;
+            if (rpmUp && !rpmUpWasPressed) shooterRpm += SHOOTER_RPM_STEP;
+            if (rpmDown && !rpmDownWasPressed) shooterRpm -= SHOOTER_RPM_STEP;
+            rpmUpWasPressed = rpmUp;
+            rpmDownWasPressed = rpmDown;
+            shooterRpm = Range.clip(shooterRpm, 0, 6000.0);
+
             // Shooter sequence: right bumper click starts it, click again stops it
             boolean rbPressed = gamepad2.right_bumper;
             if (rbPressed && !rbWasPressed) {
@@ -293,18 +325,35 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
 
             double flywheelRpm = flywheel.getVelocity() * (FLYWHEEL_ENCODER_INVERTED ? -1 : 1) * 60.0 / TICKS_PER_REV;
             if (shooterState == ShooterState.SPINNING_UP
-                    && (Math.abs(flywheelRpm - SHOOTER_RPM) <= SHOOTER_RPM_TOLERANCE
+                    && (flywheelRpm >= shooterRpm - SHOOTER_READY_MARGIN_RPM
                         || blockerTimer.seconds() >= SHOOTER_SPINUP_TIMEOUT_SEC)) {
                 shooterState = ShooterState.OPENING_BLOCKER;
                 boostTimer.reset();
                 blockerTimer.reset();
             } else if (shooterState == ShooterState.OPENING_BLOCKER && blockerTimer.seconds() >= BLOCKER_OPEN_WAIT_SEC) {
-                shooterState = ShooterState.FEEDING;
+                shooterState = ShooterState.BURST;
+                shortBurstsDone = 0;
+                blockerTimer.reset();
+            } else if (shooterState == ShooterState.BURST && blockerTimer.seconds() >= BURST_SEC) {
+                shortBurstsDone++;
+                shooterState = ShooterState.GAP;
+                blockerTimer.reset();
+            } else if (shooterState == ShooterState.GAP && blockerTimer.seconds() >= BURST_GAP_SEC) {
+                shooterState = shortBurstsDone >= SHORT_BURSTS ? ShooterState.LONG_BURST : ShooterState.BURST;
+                blockerTimer.reset();
+            } else if (shooterState == ShooterState.LONG_BURST && blockerTimer.seconds() >= LONG_BURST_SEC) {
+                shooterState = ShooterState.OFF;
+                if (cameraReady) {
+                    aimOn = false;
+                    lockedCell = -1;
+                }
             }
 
-            // Intake
-            if (shooterState == ShooterState.FEEDING) {
-                intake.setPower(SHOOT_INTAKE_POWER);
+            // Intake: bursts feed the shooter, otherwise it stays off while the sequence runs
+            if (shooterState == ShooterState.BURST || shooterState == ShooterState.LONG_BURST) {
+                intake.setPower(BURST_INTAKE_POWER);
+            } else if (shooterState != ShooterState.OFF) {
+                intake.setPower(0);
             } else if (gamepad1.right_trigger > 0.1 || gamepad2.left_bumper) {
                 intake.setPower(1);
             } else if (gamepad1.left_trigger > 0.1 || gamepad2.left_trigger > 0.1) {
@@ -316,9 +365,9 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
             // //Flywheel
             double rpm = 2500.0;
             if (shooterState != ShooterState.OFF) {
-                double loadBoost = shooterState == ShooterState.OPENING_BLOCKER || shooterState == ShooterState.FEEDING
+                double loadBoost = shooterState != ShooterState.SPINNING_UP
                         ? SHOOTER_LOAD_BOOST_RPM * Math.min(1.0, boostTimer.seconds() / SHOOTER_LOAD_BOOST_RAMP_SEC) : 0;
-                flywheel.setPower(flywheelPower(SHOOTER_RPM + FLYWHEEL_RPM_OFFSET + loadBoost));
+                flywheel.setPower(flywheelPower(shooterRpm + FLYWHEEL_RPM_OFFSET + loadBoost));
             } else if (gamepad2.right_trigger > 0.1) {
                 flywheel.setPower(-flywheelPower(rpm));
             } else {
@@ -330,7 +379,9 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
             // // Blocker
             boolean blockerOpen = gamepad2.a
                     || shooterState == ShooterState.OPENING_BLOCKER
-                    || shooterState == ShooterState.FEEDING;
+                    || shooterState == ShooterState.BURST
+                    || shooterState == ShooterState.GAP
+                    || shooterState == ShooterState.LONG_BURST;
             blocker.setPosition(blockerOpen ? BLOCKER_OPEN : BLOCKER_CLOSED);
 
             // Flower Bar
@@ -353,8 +404,8 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
             telemetry.addData("BR Power", "%.2f", backRightPower);
             // telemetry.addData("Intake Power", "%.2f", intake.getPower());
             telemetry.addData("Shooter", shooterState);
-            telemetry.addData("Flywheel RPM", "%.0f (target %.0f)", flywheelRpm, SHOOTER_RPM);
-            telemetry.addData("Flywheel raw", "%.0f ticks/s (target %.0f) | power %.2f", flywheelRpm * TICKS_PER_REV / 60.0, getTickSpeed(SHOOTER_RPM), flywheel.getPower());
+            telemetry.addData("Flywheel RPM", "%.0f (target %.0f, ready at %.0f)", flywheelRpm, shooterRpm, shooterRpm - SHOOTER_READY_MARGIN_RPM);
+            telemetry.addData("Flywheel raw", "%.0f ticks/s (target %.0f) | power %.2f", flywheelRpm * TICKS_PER_REV / 60.0, getTickSpeed(shooterRpm), flywheel.getPower());
             telemetry.addData("Flower bar", flowerBarUp ? "UP" : "DOWN");
             telemetry.update();
         }

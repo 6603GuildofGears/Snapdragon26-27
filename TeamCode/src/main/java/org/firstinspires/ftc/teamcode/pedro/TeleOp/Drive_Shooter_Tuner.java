@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.pedro.TeleOp;
 
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -18,6 +19,7 @@ import com.qualcomm.robotcore.util.Range;
  * suggested scales (telemetry) into DRIVE_SCALE so the strong motors are slowed down to
  * match the weakest one.
  */
+@Disabled
 @TeleOp(name = "Drive Shooter Tuner", group = "Tuning")
 public class Drive_Shooter_Tuner extends LinearOpMode {
 

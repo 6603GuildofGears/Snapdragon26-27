@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.pedro.TeleOp;
 
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -18,6 +19,7 @@ import com.qualcomm.robotcore.util.Range;
  *   Left stick Y  (up = increase) = blocker position
  *   Dpad up = flowerBar up position, Dpad down = flowerBar down position
  */
+@Disabled
 @TeleOp(name = "Hardware Test", group = "Test")
 public class Hardware_Test extends LinearOpMode {
 
