@@ -57,7 +57,7 @@ public class Snapdragon_Blue extends LinearOpMode {
     static final double DRIVE_SCALE_BL = 1.0;
     static final double DRIVE_SCALE_FR = 0.976;
     static final double DRIVE_SCALE_BR = 0.992;
-    static final double SHOOTER_RPM = 2500.0;
+    static final double SHOOTER_RPM = 2375.0;
 
     // Flywheel encoder counts negative when driven forward, which makes the hub's velocity loop
     // run away to full power. So it runs open loop: power = FLYWHEEL_KF * target ticks/s.

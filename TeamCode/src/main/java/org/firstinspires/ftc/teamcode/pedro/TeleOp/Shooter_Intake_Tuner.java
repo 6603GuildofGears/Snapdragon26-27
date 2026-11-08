@@ -31,7 +31,7 @@ public class Shooter_Intake_Tuner extends LinearOpMode {
     static final double FLYWHEEL_KF = 1.0 / (FLYWHEEL_FREE_SPEED_RPM * TICKS_PER_REV / 60.0);
     static final double FLYWHEEL_RPM_OFFSET = 550.0;
 
-    static final double START_RPM = 2500.0;
+    static final double START_RPM = 2375.0;
     static final double RPM_STEP = 25.0;
     static final double MAX_RPM = 6000.0;
 
@@ -42,7 +42,7 @@ public class Shooter_Intake_Tuner extends LinearOpMode {
     static final double BLOCKER_CLOSED = 0.204;
 
     // Burst shoot sequence
-    static final double SEQ_READY_MARGIN_RPM = 200.0; // sequence starts at (target rpm - this), 2500 - 200 = 2300
+    static final double SEQ_READY_MARGIN_RPM = 200.0; // sequence starts at (target rpm - this), 2375 - 200 = 2175
     static final double SEQ_BLOCKER_WAIT_SEC = 0.25; // let the blocker open before the first burst
     static final double BURST_INTAKE_POWER = 0.5;
     static final double BURST_SEC = 0.2;

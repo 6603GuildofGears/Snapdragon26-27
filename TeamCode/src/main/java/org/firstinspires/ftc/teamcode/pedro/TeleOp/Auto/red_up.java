@@ -6,6 +6,7 @@ import com.pedropathing.api.Paths;
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.follower.Follower;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Shooter;
 
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
@@ -22,6 +23,7 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 public class red_up extends LinearOpMode {
 
     private Follower follower;
+    private Shooter shooter;
 
     private final PoseFactory poseFactory = PoseFactory.degrees();
 
@@ -32,12 +34,7 @@ public class red_up extends LinearOpMode {
     // Autonomous routine
     public Command autoRoutine() {
         return sequential(
-                 // shooter cmd here
-            //
-            //
-            //    
-
-
+            shooter.shoot(),
             follow(follower, drivetopark())
         );
     }
@@ -45,6 +42,7 @@ public class red_up extends LinearOpMode {
     @Override
     public void runOpMode() {
         Scheduler.reset();
+        shooter = new Shooter(hardwareMap);
         follower = Constants.create(hardwareMap);
         follower.setPose(start);
         follower.update();
@@ -67,6 +65,8 @@ public class red_up extends LinearOpMode {
 
             telemetry.update();
         }
+
+        shooter.stop();
     }
 
     public Path drivetopark() {

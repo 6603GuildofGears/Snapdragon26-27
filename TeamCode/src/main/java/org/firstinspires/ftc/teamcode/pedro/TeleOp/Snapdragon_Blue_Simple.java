@@ -55,7 +55,7 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
     static final double DRIVE_SCALE_BL = 1.0;
     static final double DRIVE_SCALE_FR = 0.976;
     static final double DRIVE_SCALE_BR = 0.992;
-    static final double SHOOTER_RPM = 2500.0;
+    static final double SHOOTER_RPM = 2400.0;
 
     // Flywheel encoder counts negative when driven forward, which makes the hub's velocity loop
     // run away to full power. So it runs open loop: power = FLYWHEEL_KF * target ticks/s.
@@ -72,11 +72,11 @@ public class Snapdragon_Blue_Simple extends LinearOpMode {
     static final double BLOCKER_OPEN = 0.23;
     static final double BLOCKER_CLOSED = 0.204;
     static final double BLOCKER_OPEN_WAIT_SEC = 0.25; // make sure it is fully open before feeding
-    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.0; // start anyway if the flywheel never reaches the ready rpm
+    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.5; // start anyway if the flywheel never reaches the ready rpm
 
     // Burst feed sequence: short bursts with gaps, then one long burst
     static final double BURST_INTAKE_POWER = 0.5;
-    static final double BURST_SEC = 0.2;
+    static final double BURST_SEC = 0.15;
     static final double BURST_GAP_SEC = 0.5;
     static final int SHORT_BURSTS = 3;
     static final double LONG_BURST_SEC = 3.0;
