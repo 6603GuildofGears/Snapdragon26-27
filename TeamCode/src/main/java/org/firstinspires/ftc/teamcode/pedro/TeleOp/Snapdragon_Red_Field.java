@@ -29,7 +29,7 @@ import java.util.List;
  */
 @Disabled
 @TeleOp(name = "Snapdragon Red-field")
-public class Snapdragon_Red extends LinearOpMode {
+public class Snapdragon_Red_Field extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;
 

@@ -26,7 +26,7 @@ import java.util.List;
  * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
  */
 @TeleOp(name = "Snapdragon Red")
-public class Snapdragon_Red_Simple extends LinearOpMode {
+public class Snapdragon_Red extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;
 
