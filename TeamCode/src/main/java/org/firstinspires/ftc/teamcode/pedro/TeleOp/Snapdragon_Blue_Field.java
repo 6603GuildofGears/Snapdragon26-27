@@ -6,6 +6,7 @@ import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.Servo;
@@ -25,8 +26,9 @@ import java.util.List;
  * Moving the right stick overrides it; let go and it re-locks onto the most centered CELL.
  * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
  */
-@TeleOp(name = "Snapdragon Red")
-public class Snapdragon_Red_Simple extends LinearOpMode {
+@Disabled
+@TeleOp(name = "Snapdragon Blue-field")
+public class Snapdragon_Blue extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;
 
@@ -43,11 +45,11 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
     static final double DEFAULT_DISTANCE_IN = 60.0;
     static final double MIN_DISTANCE_IN     = 18.0;
 
-    static final int FIRST_TAG_ID = 30;
-    static final int LAST_TAG_ID  = 37;
+    static final int FIRST_TAG_ID = 38;
+    static final int LAST_TAG_ID  = 45;
 
     static final double FLOWER_BAR_DOWN = 0.435;
-    static final double FLOWER_BAR_UP   = 0.35;
+    static final double FLOWER_BAR_UP   = 0.34;
 
     static final double DRIVE_SPEED = 0.45;
     // Measured peak rpm (FL 5186, BL 5186, FR 5314, BR 5229) matched to the slowest motor
@@ -55,7 +57,7 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
     static final double DRIVE_SCALE_BL = 1.0;
     static final double DRIVE_SCALE_FR = 0.976;
     static final double DRIVE_SCALE_BR = 0.992;
-    static final double SHOOTER_RPM = 2400.0;
+    static final double SHOOTER_RPM = 2375.0;
 
     // Flywheel encoder counts negative when driven forward, which makes the hub's velocity loop
     // run away to full power. So it runs open loop: power = FLYWHEEL_KF * target ticks/s.
@@ -72,11 +74,11 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
     static final double BLOCKER_OPEN = 0.23;
     static final double BLOCKER_CLOSED = 0.204;
     static final double BLOCKER_OPEN_WAIT_SEC = 0.25; // make sure it is fully open before feeding
-    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.5; // start anyway if the flywheel never reaches the ready rpm
+    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.0; // start anyway if the flywheel never reaches the ready rpm
 
     // Burst feed sequence: short bursts with gaps, then one long burst
     static final double BURST_INTAKE_POWER = 0.5;
-    static final double BURST_SEC = 0.15;
+    static final double BURST_SEC = 0.2;
     static final double BURST_GAP_SEC = 0.5;
     static final int SHORT_BURSTS = 3;
     static final double LONG_BURST_SEC = 3.0;
@@ -140,7 +142,6 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
         backRightMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         // blocker.setPosition(0.35);
-        
 
         // Limelight (optional)
         Limelight3A limelight = hardwareMap.tryGet(Limelight3A.class, "limelight");
@@ -150,7 +151,7 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
             limelight.start();
         }
 
-        telemetry.addLine("Pinpoint Robot-Relative Drive Ready");
+        telemetry.addLine("Pinpoint Field Drive Ready");
         telemetry.addData("Limelight", cameraReady ? "ready - press A (gamepad 1) to aim-lock" : "not configured - aim-lock disabled");
         telemetry.update();
 
@@ -208,9 +209,12 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
                 pinpoint.resetPosAndIMU();
             }
 
-            // Robot-relative drive (no field-centric rotation)
-            double rotX = x;
-            double rotY = y;
+            // Pinpoint heading
+            double botHeading = pinpoint.getHeading(AngleUnit.RADIANS);
+
+            // Field-centric transformation
+            double rotX = x * Math.cos(-botHeading) - y * Math.sin(-botHeading);
+            double rotY = x * Math.sin(-botHeading) + y * Math.cos(-botHeading);
 
             // Strafing compensation
             rotX *= 1.1;
@@ -383,15 +387,13 @@ public class Snapdragon_Red_Simple extends LinearOpMode {
                     || shooterState == ShooterState.GAP
                     || shooterState == ShooterState.LONG_BURST;
             blocker.setPosition(blockerOpen ? BLOCKER_OPEN : BLOCKER_CLOSED);
-
-            // Flower Bar
+                 // Flower Bar
             boolean bPressed = gamepad2.b;
             if (bPressed && !bWasPressed) {
                 flowerBarUp = !flowerBarUp;
             }
             bWasPressed = bPressed;
             flowerBar.setPosition(flowerBarUp ? FLOWER_BAR_UP : FLOWER_BAR_DOWN);
-            
 
             // Telemetry
             telemetry.addData("Aim", aimStatus);

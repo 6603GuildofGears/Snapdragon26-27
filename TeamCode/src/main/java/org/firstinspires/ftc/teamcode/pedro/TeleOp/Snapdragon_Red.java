@@ -1,6 +1,5 @@
 package org.firstinspires.ftc.teamcode.pedro.TeleOp;
 
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
@@ -17,7 +16,6 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.robotcore.external.navigation.Position;
 
-
 import java.util.List;
 
 
@@ -27,9 +25,8 @@ import java.util.List;
  * Moving the right stick overrides it; let go and it re-locks onto the most centered CELL.
  * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
  */
-@Disabled
-@TeleOp(name = "Snapdragon Red-field")
-public class Snapdragon_Red extends LinearOpMode {
+@TeleOp(name = "Snapdragon Red")
+public class Snapdragon_Red_Simple extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;
 
@@ -58,7 +55,7 @@ public class Snapdragon_Red extends LinearOpMode {
     static final double DRIVE_SCALE_BL = 1.0;
     static final double DRIVE_SCALE_FR = 0.976;
     static final double DRIVE_SCALE_BR = 0.992;
-    static final double SHOOTER_RPM = 2375.0;
+    static final double SHOOTER_RPM = 2400.0;
 
     // Flywheel encoder counts negative when driven forward, which makes the hub's velocity loop
     // run away to full power. So it runs open loop: power = FLYWHEEL_KF * target ticks/s.
@@ -75,11 +72,11 @@ public class Snapdragon_Red extends LinearOpMode {
     static final double BLOCKER_OPEN = 0.23;
     static final double BLOCKER_CLOSED = 0.204;
     static final double BLOCKER_OPEN_WAIT_SEC = 0.25; // make sure it is fully open before feeding
-    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.0; // start anyway if the flywheel never reaches the ready rpm
+    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.5; // start anyway if the flywheel never reaches the ready rpm
 
     // Burst feed sequence: short bursts with gaps, then one long burst
     static final double BURST_INTAKE_POWER = 0.5;
-    static final double BURST_SEC = 0.2;
+    static final double BURST_SEC = 0.15;
     static final double BURST_GAP_SEC = 0.5;
     static final int SHORT_BURSTS = 3;
     static final double LONG_BURST_SEC = 3.0;
@@ -153,7 +150,7 @@ public class Snapdragon_Red extends LinearOpMode {
             limelight.start();
         }
 
-        telemetry.addLine("Pinpoint Field Drive Ready");
+        telemetry.addLine("Pinpoint Robot-Relative Drive Ready");
         telemetry.addData("Limelight", cameraReady ? "ready - press A (gamepad 1) to aim-lock" : "not configured - aim-lock disabled");
         telemetry.update();
 
@@ -211,12 +208,9 @@ public class Snapdragon_Red extends LinearOpMode {
                 pinpoint.resetPosAndIMU();
             }
 
-            // Pinpoint heading
-            double botHeading = pinpoint.getHeading(AngleUnit.RADIANS);
-
-            // Field-centric transformation
-            double rotX = x * Math.cos(-botHeading) - y * Math.sin(-botHeading);
-            double rotY = x * Math.sin(-botHeading) + y * Math.cos(-botHeading);
+            // Robot-relative drive (no field-centric rotation)
+            double rotX = x;
+            double rotY = y;
 
             // Strafing compensation
             rotX *= 1.1;
