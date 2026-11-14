@@ -61,7 +61,7 @@ public class Snapdragon_AllInOne extends LinearOpMode {
     private int firstTagId = 30;
     private int lastTagId  = 37;
 
-    static final double FLOWER_BAR_DOWN = 0.43;
+    static final double FLOWER_BAR_DOWN = 0.75;
     static final double FLOWER_BAR_UP   = 0.125;
 
     static final double DRIVE_SPEED = 0.8;

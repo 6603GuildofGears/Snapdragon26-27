@@ -35,6 +35,7 @@ public static Follower create(HardwareMap h) {
     c.frontRightDirection.set(DcMotorSimple.Direction.FORWARD);
     c.backLeftDirection.set(DcMotorSimple.Direction.REVERSE);
     c.backRightDirection.set(DcMotorSimple.Direction.REVERSE);
+    c.manualBrakeMode.set(true);
     
 });
 
