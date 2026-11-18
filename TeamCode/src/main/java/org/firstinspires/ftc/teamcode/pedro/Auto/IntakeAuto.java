@@ -14,16 +14,16 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.pedro.Shooter;
 
-@Autonomous(name = "Blue Intake Auto", group = "Autonomous")
-public class BlueIntakeAuto extends LinearOpMode {
+@Autonomous(name = " Intake Auto", group = "Autonomous")
+public class IntakeAuto extends LinearOpMode {
     static final double INTAKE_POWER = 1.0;
 
     private Follower follower;
     private Shooter shooter;
     private BluePaths paths;
 
-    // Shoot, intake (bridge, intake path, back up and return to the same spot), back to shoot, shoot,
-    // flower (bar down + intake, drive in, strafe, bar up on the way back), shoot, park
+    // Shoot, intake (bridge, intake path), back to shoot, shoot,
+    // flower (bar down + intake, drive in, strafe, bar up, drive to park)
     private Command autoRoutine() {
         return sequential(
                 shooter.shoot(),
@@ -31,8 +31,6 @@ public class BlueIntakeAuto extends LinearOpMode {
                         instant(() -> shooter.setIntakePower(INTAKE_POWER)),
                         follow(follower, paths.starttoIntakeBridge()),
                         follow(follower, paths.intakePath()),
-                        follow(follower, paths.intakeBackup()),
-                        follow(follower, paths.intakeReturn()),
                         instant(() -> shooter.setIntakePower(0))
                 ),
                 follow(follower, paths.intaketoShoot()),
@@ -45,11 +43,9 @@ public class BlueIntakeAuto extends LinearOpMode {
                         follow(follower, paths.shoottoFlower1()),
                         follow(follower, paths.flower1Strafe()),
                         instant(() -> shooter.setFlowerBar(false)),
-                        follow(follower, paths.flower1toShoot()),
+                        follow(follower, paths.flower1toPark()),
                         instant(() -> shooter.setIntakePower(0))
-                ),
-                shooter.shoot(),
-                follow(follower, paths.shoottoPark())
+                )
         );
     }
 
