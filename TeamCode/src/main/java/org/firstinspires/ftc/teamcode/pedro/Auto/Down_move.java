@@ -5,9 +5,6 @@ import com.pedropathing.api.Paths;
 
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.follower.Follower;
-import org.firstinspires.ftc.teamcode.pedro.Constants;
-import org.firstinspires.ftc.teamcode.pedro.Shooter;
-
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 import com.pedropathing.ivy.Command;
@@ -17,34 +14,29 @@ import static com.pedropathing.ivy.commands.Commands.*;
 import static com.pedropathing.ivy.groups.Groups.sequential;
 import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
-@Disabled
-@Autonomous(name = "Red Up", group = "Autonomous")
-public class red_up extends LinearOpMode {
+@Autonomous(name = "Down_move", group = "Autonomous")
+public class Down_move extends LinearOpMode {
 
     private Follower follower;
-    private Shooter shooter;
 
     private final PoseFactory poseFactory = PoseFactory.degrees();
 
-    private final Pose start = poseFactory.of(56, 8, 90);
-    private final Pose drivetopark = poseFactory.of(8, 95, 0);
-    private final Pose drivetoparkControl1 = poseFactory.of(19.9512, 31.6553, 0);
+    private final Pose start = poseFactory.of(79, 8, 90);
+    private final Pose path1 = poseFactory.of(130, 26, 180);
+    private final Pose path1Control1 = poseFactory.of(85.5216, 24.5635, 0);
 
     // Autonomous routine
     public Command autoRoutine() {
         return sequential(
-            shooter.shoot(),
-            follow(follower, drivetopark())
+            follow(follower, path1())
         );
     }
 
     @Override
     public void runOpMode() {
         Scheduler.reset();
-        shooter = new Shooter(hardwareMap);
         follower = Constants.create(hardwareMap);
         follower.setPose(start);
         follower.update();
@@ -54,7 +46,6 @@ public class red_up extends LinearOpMode {
 
         while (opModeIsActive()) {
             follower.update();
-            shooter.update();
             Scheduler.execute();
 
             telemetry.addData("x", follower.pose().x());
@@ -68,11 +59,9 @@ public class red_up extends LinearOpMode {
 
             telemetry.update();
         }
-
-        shooter.stop();
     }
 
-    public Path drivetopark() {
-        return Paths.curve(start, drivetoparkControl1, drivetopark).linear(start, drivetopark);
+    public Path path1() {
+        return Paths.curve(start, path1Control1, path1).linear(start, path1);
     }
 }

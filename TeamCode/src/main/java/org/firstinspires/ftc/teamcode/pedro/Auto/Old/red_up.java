@@ -1,13 +1,13 @@
-package org.firstinspires.ftc.teamcode.pedro.Auto;
+package org.firstinspires.ftc.teamcode.pedro.Auto.Old;
 
 import static com.pedropathing.api.Paths.*;
 import com.pedropathing.api.Paths;
 
+import com.pedropathing.api.PoseFactory;
+import com.pedropathing.follower.Follower;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.pedro.Shooter;
 
-import com.pedropathing.api.PoseFactory;
-import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 import com.pedropathing.ivy.Command;
@@ -17,20 +17,21 @@ import static com.pedropathing.ivy.commands.Commands.*;
 import static com.pedropathing.ivy.groups.Groups.sequential;
 import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
-
-@Autonomous(name = "blue up", group = "Autonomous")
-public class blue_up extends LinearOpMode {
+@Disabled
+@Autonomous(name = "Red Up", group = "Autonomous")
+public class red_up extends LinearOpMode {
 
     private Follower follower;
     private Shooter shooter;
 
     private final PoseFactory poseFactory = PoseFactory.degrees();
 
-    private final Pose start = poseFactory.of(88, 133, 270);
-    private final Pose drivetopark = poseFactory.of(130, 45, 180);
-    private final Pose drivetoparkControl1 = poseFactory.of(117.6582, 75.059, 0);
+    private final Pose start = poseFactory.of(56, 8, 90);
+    private final Pose drivetopark = poseFactory.of(8, 95, 0);
+    private final Pose drivetoparkControl1 = poseFactory.of(19.9512, 31.6553, 0);
 
     // Autonomous routine
     public Command autoRoutine() {
