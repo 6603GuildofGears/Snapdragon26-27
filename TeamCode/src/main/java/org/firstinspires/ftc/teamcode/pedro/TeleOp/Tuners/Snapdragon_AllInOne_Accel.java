@@ -17,6 +17,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.robotcore.external.navigation.Position;
 
+import java.util.Arrays;
 import java.util.List;
 
 
@@ -64,8 +65,11 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
     static final double FLOWER_BAR_DOWN = 0.75;
     static final double FLOWER_BAR_UP   = 0.125;
 
-    static final double DRIVE_SPEED = 0.85;
-    static final double DRIVE_ACCEL_TIME_SEC = 0.2;
+    static final double DRIVE_SPEED = 0.8;
+    // A stick command that speeds up (or reverses) by more than this ramps in halving steps (0.5, 0.75, 0.875, ... of the change) to limit voltage sag; anything else applies instantly
+    static final double HARMONIC_RAMP_THRESHOLD = 0.5;
+    static final double HARMONIC_RAMP_TIME_SEC = 0.1;
+    static final int HARMONIC_RAMP_STEPS = 5; // 0.5, 0.75, 0.875, 0.9375, 0.96875, then full target
     // Measured peak rpm (FL 5186, BL 5186, FR 5314, BR 5229) matched to the slowest motor
     static final double DRIVE_SCALE_FL = 1.0;
     static final double DRIVE_SCALE_BL = 1.0;
@@ -210,6 +214,8 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
         boolean braking = false;
         boolean stickDriveRamping = false;
         ElapsedTime driveRampTimer = new ElapsedTime();
+        double[] appliedStick = new double[3]; // y, x, rx actually sent to the mixer
+        double[] rampStart = new double[3];
 
         while (opModeIsActive()) {
             pinpoint.update();
@@ -219,21 +225,39 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
             double stickX = gamepad1.left_stick_x * DRIVE_SPEED;
             double stickRx = gamepad1.right_stick_x * DRIVE_SPEED;
             boolean hasStickInput = Math.abs(stickY) + Math.abs(stickX) + Math.abs(stickRx) > 0.01;
-            double stickAcceleration = 1.0;
-            if (hasStickInput) {
-                if (!stickDriveRamping) {
-                    driveRampTimer.reset();
-                    stickDriveRamping = true;
-                }
-                stickAcceleration = Range.clip(
-                        driveRampTimer.seconds() / DRIVE_ACCEL_TIME_SEC, 0.0, 1.0);
-            } else {
+            double[] stickTarget = {stickY, stickX, stickRx};
+            if (!hasStickInput) {
                 stickDriveRamping = false;
-                driveRampTimer.reset();
+                Arrays.fill(appliedStick, 0.0);
+            } else {
+                if (!stickDriveRamping) {
+                    for (int i = 0; i < 3; i++) {
+                        if (accelerationJump(appliedStick[i], stickTarget[i]) > HARMONIC_RAMP_THRESHOLD) {
+                            System.arraycopy(appliedStick, 0, rampStart, 0, 3);
+                            driveRampTimer.reset();
+                            stickDriveRamping = true;
+                            break;
+                        }
+                    }
+                }
+                if (stickDriveRamping && driveRampTimer.seconds() >= HARMONIC_RAMP_TIME_SEC) {
+                    stickDriveRamping = false;
+                }
+                for (int i = 0; i < 3; i++) {
+                    double out = stickTarget[i];
+                    if (stickDriveRamping) {
+                        double ramped = rampStart[i] + (stickTarget[i] - rampStart[i]) * harmonicRamp(driveRampTimer.seconds());
+                        boolean slowing = stickTarget[i] * ramped >= 0 && Math.abs(stickTarget[i]) <= Math.abs(ramped);
+                        if (!slowing) {
+                            out = ramped;
+                        }
+                    }
+                    appliedStick[i] = out;
+                }
             }
-            double y = stickY * stickAcceleration;
-            double x = stickX * stickAcceleration;
-            double rx = stickRx * stickAcceleration;
+            double y = appliedStick[0];
+            double x = appliedStick[1];
+            double rx = appliedStick[2];
 
             // Dpad drives inverse robot-relative: up = back, down = forward, left = strafe right, right = strafe left
             if (gamepad1.dpad_up) {
@@ -528,6 +552,23 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
         Position p = pose.getPosition().toUnit(DistanceUnit.INCH);
         double dist = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
         return dist < 0.1 ? Double.NaN : dist;
+    }
+
+    /** How much a command speeds up in the new direction; slowing down toward zero counts as 0, a reversal counts the full swing. */
+    private static double accelerationJump(double applied, double target) {
+        if (applied * target >= 0) {
+            return Math.max(0.0, Math.abs(target) - Math.abs(applied));
+        }
+        return Math.abs(target - applied);
+    }
+
+    /** Fraction of target after elapsedSec: 1 - 0.5^(n+1) for equal-length step n, then 1.0 once the ramp time is up. */
+    private static double harmonicRamp(double elapsedSec) {
+        if (elapsedSec >= HARMONIC_RAMP_TIME_SEC) {
+            return 1.0;
+        }
+        int step = (int) (elapsedSec / (HARMONIC_RAMP_TIME_SEC / HARMONIC_RAMP_STEPS));
+        return 1.0 - Math.pow(0.5, step + 1);
     }
 
     /** Opposite-direction pulse for one wheel, never stronger than the power it was running at. */
