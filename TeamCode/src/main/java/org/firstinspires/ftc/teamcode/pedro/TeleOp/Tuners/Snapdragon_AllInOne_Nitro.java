@@ -33,7 +33,7 @@ import java.util.List;
  *   Left bumper     intake in
  *   Left trigger    intake reverse
  *   Right trigger   shooter reverse
- *   A (hold)        manual blocker open
+ *   A (hold)        nitro: faster translation, turn speed unchanged
  *   B               toggle flower bar up/down
  *
  * Aim-lock turns the robot to stay pointed at the middle of a BIOBUZZ CELL's 4 AprilTags
@@ -65,7 +65,8 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
     static final double FLOWER_BAR_DOWN = 0.75;
     static final double FLOWER_BAR_UP   = 0.125;
 
-    static final double DRIVE_SPEED = 0.8;
+    static final double DRIVE_SPEED = 0.6;
+    static final double NITRO_SPEED = 0.9;
     // A stick command that speeds up (or reverses) by more than this ramps in halving steps (0.5, 0.75, 0.875, ... of the change) to limit voltage sag; anything else applies instantly
     static final double HARMONIC_RAMP_THRESHOLD = 0.5;
     static final double HARMONIC_RAMP_TIME_SEC = 0.1;
@@ -221,8 +222,9 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
             pinpoint.update();
 
             // Driver controls
-            double stickY = -gamepad1.left_stick_y * DRIVE_SPEED;
-            double stickX = gamepad1.left_stick_x * DRIVE_SPEED;
+            double translateSpeed = gamepad1.a ? NITRO_SPEED : DRIVE_SPEED;
+            double stickY = -gamepad1.left_stick_y * translateSpeed;
+            double stickX = gamepad1.left_stick_x * translateSpeed;
             double stickRx = gamepad1.right_stick_x * DRIVE_SPEED;
             boolean hasStickInput = Math.abs(stickY) + Math.abs(stickX) + Math.abs(stickRx) > 0.01;
             double[] stickTarget = {stickY, stickX, stickRx};
@@ -467,8 +469,7 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
 
 
             // // Blocker
-            boolean blockerOpen = gamepad1.a
-                    || shooterState == ShooterState.OPENING_BLOCKER
+            boolean blockerOpen = shooterState == ShooterState.OPENING_BLOCKER
                     || shooterState == ShooterState.FEEDING;
             blocker.setPosition(blockerOpen ? BLOCKER_OPEN : BLOCKER_CLOSED);
 
