@@ -17,21 +17,26 @@ import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Shooter;
 
-@Autonomous(name = "Down_move", group = "Autonomous")
-public class Down_move extends LinearOpMode {
+@Autonomous(name = "Down_One", group = "Autonomous")
+public class Down_One extends LinearOpMode {
+    static final double SHOOT_DELAY_SEC = 10.0;
 
     private Follower follower;
+    private Shooter shooter;
 
     private final PoseFactory poseFactory = PoseFactory.degrees();
 
     private final Pose start = poseFactory.of(79, 8, 90);
-    private final Pose path1 = poseFactory.of(130, 26, 180);
+    private final Pose path1 = poseFactory.of(132, 26, 180);
     private final Pose path1Control1 = poseFactory.of(85.5216, 24.5635, 0);
 
-    // Autonomous routine
+    // Wait, shoot, then park
     public Command autoRoutine() {
         return sequential(
+            waitMs(SHOOT_DELAY_SEC * 1000),
+            shooter.shoot(),
             follow(follower, path1())
         );
     }
@@ -39,15 +44,19 @@ public class Down_move extends LinearOpMode {
     @Override
     public void runOpMode() {
         Scheduler.reset();
+        shooter = new Shooter(hardwareMap);
         follower = Constants.create(hardwareMap);
         follower.setPose(start);
         follower.update();
 
         waitForStart();
+        if (isStopRequested()) return;
+
         schedule(autoRoutine());
 
         while (opModeIsActive()) {
             follower.update();
+            shooter.update();
             Scheduler.execute();
 
             telemetry.addData("x", follower.pose().x());
@@ -61,6 +70,8 @@ public class Down_move extends LinearOpMode {
 
             telemetry.update();
         }
+
+        shooter.stop();
     }
 
     public Path path1() {

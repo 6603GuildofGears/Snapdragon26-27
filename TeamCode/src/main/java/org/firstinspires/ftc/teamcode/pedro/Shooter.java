@@ -19,7 +19,7 @@ import com.qualcomm.robotcore.util.Range;
 /** Flywheel + blocker + intake, with the same shoot sequence the TeleOps use. */
 public class Shooter {
     static final double TICKS_PER_REV = 28.0;
-    static final double SHOOTER_RPM = 2425.0;
+    static final double SHOOTER_RPM = 2450.0;
 
     // Flywheel encoder counts negative when driven forward, so the hub's own velocity loop can't be used.
     // The flywheel runs closed loop here instead (gains from Flywheel_AutoTuner, in 12V-normalized power):
@@ -46,10 +46,10 @@ public class Shooter {
     static final double FLOWER_BAR_UP = 0.125;
 
     // Feed: one continuous feed with no pauses
-    static final double FEED_INTAKE_POWER = 0.5;
+    static final double FEED_INTAKE_POWER = 0.4;
     static final double FEED_SEC = 3.0;
     static final double FEED_BOOST_DELAY_SEC = 0.25; // feeding this long before the boost kicks in
-    static final double FEED_BOOST_RPM = 225.0;      // extra target rpm while feeding, to offset the drop from fast feeding
+    static final double FEED_BOOST_RPM = 200.0;      // extra target rpm while feeding, to offset the drop from fast feeding
 
     private final DcMotorEx flywheel;
     private final DcMotor intake;

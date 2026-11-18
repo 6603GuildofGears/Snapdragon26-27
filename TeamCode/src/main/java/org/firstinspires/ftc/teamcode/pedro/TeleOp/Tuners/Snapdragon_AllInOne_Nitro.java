@@ -40,8 +40,8 @@ import java.util.List;
  * while you drive. Moving the right stick overrides it; let go and it re-locks onto the most
  * centered CELL. Hardware config name: "limelight". Driving works without it.
  */
-@TeleOp(name = "Snapdragon All In One Accel")
-public class Snapdragon_AllInOne_Accel extends LinearOpMode {
+@TeleOp(name = "Snapdragon All-in-One Nitro")
+public class Snapdragon_AllInOne_Nitro extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;
 
@@ -66,7 +66,7 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
     static final double FLOWER_BAR_UP   = 0.125;
 
     static final double DRIVE_SPEED = 0.6;
-    static final double NITRO_SPEED = 0.9;
+    static final double NITRO_SPEED = 1;
     // A stick command that speeds up (or reverses) by more than this ramps in halving steps (0.5, 0.75, 0.875, ... of the change) to limit voltage sag; anything else applies instantly
     static final double HARMONIC_RAMP_THRESHOLD = 0.5;
     static final double HARMONIC_RAMP_TIME_SEC = 0.1;
@@ -485,6 +485,7 @@ public class Snapdragon_AllInOne_Accel extends LinearOpMode {
             // Telemetry
             telemetry.addData("Aim", aimStatus);
             telemetry.addData("Drive mode (Back to toggle)", fieldCentric ? "FIELD-CENTRIC" : "ROBOT-RELATIVE");
+            telemetry.addData("Drive speed", "%s | translate %.2f, turn %.2f", gamepad1.a ? "NITRO" : "normal", translateSpeed, DRIVE_SPEED);
             telemetry.addData("Heading", "%.2f degrees", pinpoint.getHeading(AngleUnit.DEGREES));
             telemetry.addData("Pinpoint X", "%.2f", pinpoint.getPosX(DistanceUnit.INCH));
             telemetry.addData("Pinpoint Y", "%.2f", pinpoint.getPosY(DistanceUnit.INCH));
