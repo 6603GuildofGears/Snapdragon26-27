@@ -19,7 +19,7 @@ import com.qualcomm.robotcore.util.Range;
 /** Flywheel + blocker + intake, with the same shoot sequence the TeleOps use. */
 public class Shooter {
     static final double TICKS_PER_REV = 28.0;
-    static final double SHOOTER_RPM = 2400.0;
+    static final double SHOOTER_RPM = 2425.0;
 
     // Flywheel encoder counts negative when driven forward, so the hub's own velocity loop can't be used.
     // The flywheel runs closed loop here instead (gains from Flywheel_AutoTuner, in 12V-normalized power):
@@ -33,22 +33,28 @@ public class Shooter {
     static final double FLYWHEEL_FILTER_TAU_SEC = 0.04;        // low-pass on the noisy hub velocity
     static final double FLYWHEEL_MAX_INTEGRAL = 0.12;          // integral term power cap
     static final double FLYWHEEL_INTEGRATE_WINDOW_RPM = 150.0; // only integrate this close to target
-    static final double READY_MARGIN_RPM = 100.0;    // feed starts once the rpm is at target, up to this far above it (never below)
-    static final double SPINUP_TIMEOUT_SEC = 2.0;    // feed anyway if the flywheel never reaches the ready rpm
+    static final double SHOOTER_READY_MARGIN_RPM = 100.0; // feed starts once the rpm is at target, up to this far above it (never below)
+    static final double SHOOTER_SPINUP_TIMEOUT_SEC = 2.0; // start anyway if the flywheel never reaches the ready rpm
+    static final double SHOOTER_AUTO_OFF_SEC = 15.0;
 
     static final double BLOCKER_OPEN = 0.23;
     static final double BLOCKER_CLOSED = 0.204;
     static final double BLOCKER_OPEN_WAIT_SEC = 0.25;
 
+    // Same positions as the TeleOps
+    static final double FLOWER_BAR_DOWN = 0.75;
+    static final double FLOWER_BAR_UP = 0.125;
+
     // Feed: one continuous feed with no pauses
     static final double FEED_INTAKE_POWER = 0.5;
     static final double FEED_SEC = 3.0;
     static final double FEED_BOOST_DELAY_SEC = 0.25; // feeding this long before the boost kicks in
-    static final double FEED_BOOST_RPM = 200.0;      // extra target rpm while feeding, to offset the drop from fast feeding
+    static final double FEED_BOOST_RPM = 225.0;      // extra target rpm while feeding, to offset the drop from fast feeding
 
     private final DcMotorEx flywheel;
     private final DcMotor intake;
     private final Servo blocker;
+    private final Servo flowerBar;
     private final VoltageSensor voltageSensor;
 
     private final ElapsedTime loopTimer = new ElapsedTime();
@@ -62,25 +68,35 @@ public class Shooter {
         flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
         intake = hardwareMap.get(DcMotor.class, "intake");
         blocker = hardwareMap.get(Servo.class, "blocker");
+        flowerBar = hardwareMap.get(Servo.class, "flowerBar");
         voltageSensor = hardwareMap.voltageSensor.iterator().next();
 
         flywheel.setDirection(DcMotorEx.Direction.FORWARD);
         flywheel.setMode(DcMotorEx.RunMode.RUN_WITHOUT_ENCODER);
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         intake.setDirection(DcMotor.Direction.FORWARD);
+        intake.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         blocker.setDirection(Servo.Direction.REVERSE);
         blocker.setPosition(BLOCKER_CLOSED);
+        flowerBar.setDirection(Servo.Direction.REVERSE);
+        flowerBar.setPosition(FLOWER_BAR_UP);
+    }
+
+    public void setFlowerBar(boolean down) {
+        flowerBar.setPosition(down ? FLOWER_BAR_DOWN : FLOWER_BAR_UP);
     }
 
     /** Spin up (closed loop), open the blocker, feed continuously, then shut everything off. */
     public Command shoot() {
-        Command sequence = sequential(
-                instant(this::beginShot),
-                race(waitUntil(this::atSpeed), waitMs(SPINUP_TIMEOUT_SEC * 1000)),
-                instant(() -> blocker.setPosition(BLOCKER_OPEN)),
-                waitMs(BLOCKER_OPEN_WAIT_SEC * 1000),
-                instant(this::startFeeding),
-                waitMs(FEED_SEC * 1000));
+        Command sequence = race(
+                waitMs(SHOOTER_AUTO_OFF_SEC * 1000),
+                sequential(
+                        instant(this::beginShot),
+                        race(waitUntil(this::atSpeed), waitMs(SHOOTER_SPINUP_TIMEOUT_SEC * 1000)),
+                        instant(() -> blocker.setPosition(BLOCKER_OPEN)),
+                        waitMs(BLOCKER_OPEN_WAIT_SEC * 1000),
+                        instant(this::startFeeding),
+                        waitMs(FEED_SEC * 1000)));
 
         // The flywheel loop runs alongside the whole sequence and ends with it
         return sequential(
@@ -93,10 +109,20 @@ public class Shooter {
         intake.setPower(power);
     }
 
+    /** Keeps the RPM filter in sync while idle, like the all-in-one OpMode loop. */
+    public void update() {
+        if (active) return;
+
+        double dt = loopDeltaSeconds();
+        filteredRpm += (dt / (FLYWHEEL_FILTER_TAU_SEC + dt)) * (readRpm() - filteredRpm);
+        integral = 0;
+    }
+
     /** Turns everything off and closes the blocker. Also call this when the OpMode ends. */
     public void stop() {
         active = false;
         feeding = false;
+        integral = 0;
         flywheel.setPower(0);
         intake.setPower(0);
         blocker.setPosition(BLOCKER_CLOSED);
@@ -107,10 +133,9 @@ public class Shooter {
     }
 
     private void beginShot() {
-        filteredRpm = readRpm();
         integral = 0;
         feeding = false;
-        loopTimer.reset();
+        intake.setPower(0);
         active = true;
     }
 
@@ -124,9 +149,7 @@ public class Shooter {
     private void controlFlywheel() {
         if (!active) return;
 
-        double dt = Math.max(loopTimer.seconds(), 0.004);
-        if (dt > 0.5) dt = 0.02;
-        loopTimer.reset();
+        double dt = loopDeltaSeconds();
 
         double previousRpm = filteredRpm;
         filteredRpm += (dt / (FLYWHEEL_FILTER_TAU_SEC + dt)) * (readRpm() - filteredRpm);
@@ -149,7 +172,15 @@ public class Shooter {
         flywheel.setPower(Range.clip(power * voltageScale, 0, 1));
     }
 
+    private double loopDeltaSeconds() {
+        double dt = Math.max(loopTimer.seconds(), 0.004);
+        if (dt > 0.5) dt = 0.02;
+        loopTimer.reset();
+        return dt;
+    }
+
     private boolean atSpeed() {
-        return filteredRpm >= SHOOTER_RPM && filteredRpm <= SHOOTER_RPM + READY_MARGIN_RPM;
+        return filteredRpm >= SHOOTER_RPM
+                && filteredRpm <= SHOOTER_RPM + SHOOTER_READY_MARGIN_RPM;
     }
 }

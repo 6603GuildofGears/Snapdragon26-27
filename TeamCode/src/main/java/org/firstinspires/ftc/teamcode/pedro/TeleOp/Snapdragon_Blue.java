@@ -47,8 +47,8 @@ public class Snapdragon_Blue extends LinearOpMode {
     static final int FIRST_TAG_ID = 38;
     static final int LAST_TAG_ID  = 45;
 
-    static final double FLOWER_BAR_DOWN = 0.43;
-    static final double FLOWER_BAR_UP   = 0.34;
+    static final double FLOWER_BAR_DOWN = 0.75;
+    static final double FLOWER_BAR_UP   = 0.125;
 
     static final double DRIVE_SPEED = 0.45;
     // Measured peak rpm (FL 5186, BL 5186, FR 5314, BR 5229) matched to the slowest motor

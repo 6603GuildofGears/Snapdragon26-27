@@ -17,8 +17,10 @@ import static com.pedropathing.ivy.commands.Commands.*;
 import static com.pedropathing.ivy.groups.Groups.sequential;
 import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
+@Disabled
 @Autonomous(name = "Red Up", group = "Autonomous")
 public class red_up extends LinearOpMode {
 
@@ -52,6 +54,7 @@ public class red_up extends LinearOpMode {
 
         while (opModeIsActive()) {
             follower.update();
+            shooter.update();
             Scheduler.execute();
 
             telemetry.addData("x", follower.pose().x());

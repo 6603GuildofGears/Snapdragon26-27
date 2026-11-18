@@ -9,11 +9,13 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.pedro.Shooter;
 
+@Disabled
 @Autonomous(name = "Red Intake Auto", group = "Autonomous")
 public class RedIntakeAuto extends LinearOpMode {
     static final double INTAKE_POWER = 1.0;
@@ -54,6 +56,7 @@ public class RedIntakeAuto extends LinearOpMode {
 
         while (opModeIsActive()) {
             follower.update();
+            shooter.update();
             Scheduler.execute();
 
             telemetry.addData("x", follower.pose().x());

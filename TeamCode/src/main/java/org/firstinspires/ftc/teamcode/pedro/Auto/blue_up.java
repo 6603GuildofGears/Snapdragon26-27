@@ -28,7 +28,7 @@ public class blue_up extends LinearOpMode {
 
     private final PoseFactory poseFactory = PoseFactory.degrees();
 
-    private final Pose start = poseFactory.of(88, 136, 270);
+    private final Pose start = poseFactory.of(88, 133, 270);
     private final Pose drivetopark = poseFactory.of(130, 45, 180);
     private final Pose drivetoparkControl1 = poseFactory.of(117.6582, 75.059, 0);
 
@@ -53,6 +53,7 @@ public class blue_up extends LinearOpMode {
 
         while (opModeIsActive()) {
             follower.update();
+            shooter.update();
             Scheduler.execute();
 
             telemetry.addData("x", follower.pose().x());

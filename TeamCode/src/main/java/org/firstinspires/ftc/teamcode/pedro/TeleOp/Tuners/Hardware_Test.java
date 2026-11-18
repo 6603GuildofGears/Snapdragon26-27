@@ -27,8 +27,8 @@ public class Hardware_Test extends LinearOpMode {
     static final double STICK_DEADBAND = 0.1;
     static final double SERVO_SPEED_PER_SEC = 0.5; // position change per second at full stick
     static final double SERVO_START_POS = 0.204; // blocker start (blocking)
-    static final double FLOWER_BAR_DOWN = 0.420;
-    static final double FLOWER_BAR_UP   = 0.32;
+    static final double FLOWER_BAR_DOWN = 0.75;
+    static final double FLOWER_BAR_UP   = 0.125;
 
     @Override
     public void runOpMode() throws InterruptedException {

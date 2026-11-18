@@ -1,10 +1,12 @@
 package org.firstinspires.ftc.teamcode.pedro.TeleOp.Auto;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
+@Disabled
 @Autonomous(name = "Move", group = "Autonomous")
 public class Move extends LinearOpMode {
     static final double DRIVE_POWER = 0.45;

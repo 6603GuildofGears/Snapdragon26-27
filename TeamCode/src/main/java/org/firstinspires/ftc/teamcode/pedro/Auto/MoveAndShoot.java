@@ -8,11 +8,13 @@ import static com.pedropathing.ivy.groups.Groups.sequential;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.teamcode.pedro.Shooter;
 
+@Disabled
 @Autonomous(name = "Move And Shoot", group = "Autonomous")
 public class MoveAndShoot extends LinearOpMode {
     static final double DRIVE_POWER = 0.45;
@@ -63,6 +65,7 @@ public class MoveAndShoot extends LinearOpMode {
         schedule(autoRoutine());
 
         while (opModeIsActive()) {
+            shooter.update();
             Scheduler.execute();
         }
 

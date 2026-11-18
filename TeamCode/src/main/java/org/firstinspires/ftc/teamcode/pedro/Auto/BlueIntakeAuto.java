@@ -22,17 +22,32 @@ public class BlueIntakeAuto extends LinearOpMode {
     private Shooter shooter;
     private BluePaths paths;
 
-    // Shoot, bridge, intake, back to shoot, shoot, park
+    // Shoot, intake (bridge, intake path, back up and return to the same spot), back to shoot, shoot,
+    // flower (bar down + intake, drive in, strafe, bar up on the way back), shoot, park
     private Command autoRoutine() {
         return sequential(
                 shooter.shoot(),
-                follow(follower, paths.starttoIntakeBridge()),
                 sequential(
                         instant(() -> shooter.setIntakePower(INTAKE_POWER)),
+                        follow(follower, paths.starttoIntakeBridge()),
                         follow(follower, paths.intakePath()),
+                        follow(follower, paths.intakeBackup()),
+                        follow(follower, paths.intakeReturn()),
                         instant(() -> shooter.setIntakePower(0))
                 ),
                 follow(follower, paths.intaketoShoot()),
+                shooter.shoot(),
+                sequential(
+                        instant(() -> {
+                            shooter.setFlowerBar(true);
+                            shooter.setIntakePower(INTAKE_POWER);
+                        }),
+                        follow(follower, paths.shoottoFlower1()),
+                        follow(follower, paths.flower1Strafe()),
+                        instant(() -> shooter.setFlowerBar(false)),
+                        follow(follower, paths.flower1toShoot()),
+                        instant(() -> shooter.setIntakePower(0))
+                ),
                 shooter.shoot(),
                 follow(follower, paths.shoottoPark())
         );
@@ -54,6 +69,7 @@ public class BlueIntakeAuto extends LinearOpMode {
 
         while (opModeIsActive()) {
             follower.update();
+            shooter.update();
             Scheduler.execute();
 
             telemetry.addData("x", follower.pose().x());

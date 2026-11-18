@@ -64,13 +64,13 @@ public class Snapdragon_AllInOne extends LinearOpMode {
     static final double FLOWER_BAR_DOWN = 0.75;
     static final double FLOWER_BAR_UP   = 0.125;
 
-    static final double DRIVE_SPEED = 0.8;
+    static final double DRIVE_SPEED = 0.85;
     // Measured peak rpm (FL 5186, BL 5186, FR 5314, BR 5229) matched to the slowest motor
     static final double DRIVE_SCALE_FL = 1.0;
     static final double DRIVE_SCALE_BL = 1.0;
     static final double DRIVE_SCALE_FR = 0.976;
     static final double DRIVE_SCALE_BR = 0.992;
-    static final double SHOOTER_RPM = 2400.0;
+    static final double SHOOTER_RPM = 2425.0;
 
     // Flywheel encoder counts negative when driven forward, so the hub's own velocity loop can't be used.
     // The flywheel runs closed loop here instead (gains from Flywheel_AutoTuner, in 12V-normalized power):
@@ -96,7 +96,7 @@ public class Snapdragon_AllInOne extends LinearOpMode {
     static final double FEED_INTAKE_POWER = 0.5;
     static final double FEED_SEC = 3.0;
     static final double FEED_BOOST_DELAY_SEC = 0.25; // feeding this long before the boost kicks in
-    static final double FEED_BOOST_RPM = 200.0;      // extra target rpm while feeding, to offset the drop from fast feeding
+    static final double FEED_BOOST_RPM = 225.0;      // extra target rpm while feeding, to offset the drop from fast feeding
 
     // Reverse pulse on stick release to cancel momentum
     static final double BRAKE_PULSE_POWER = 0.05;

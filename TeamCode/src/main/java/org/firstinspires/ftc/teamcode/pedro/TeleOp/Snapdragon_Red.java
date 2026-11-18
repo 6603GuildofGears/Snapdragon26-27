@@ -47,8 +47,8 @@ public class Snapdragon_Red extends LinearOpMode {
     static final int FIRST_TAG_ID = 30;
     static final int LAST_TAG_ID  = 37;
 
-    static final double FLOWER_BAR_DOWN = 0.435;
-    static final double FLOWER_BAR_UP   = 0.35;
+    static final double FLOWER_BAR_DOWN = 0.75;
+    static final double FLOWER_BAR_UP   = 0.125;
 
     static final double DRIVE_SPEED = 0.45;
     // Measured peak rpm (FL 5186, BL 5186, FR 5314, BR 5229) matched to the slowest motor
