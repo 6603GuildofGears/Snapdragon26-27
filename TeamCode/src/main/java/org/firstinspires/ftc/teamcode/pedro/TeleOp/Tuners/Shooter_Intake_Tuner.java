@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.pedro.TeleOp.Tuners;
 
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -20,6 +21,7 @@ import com.qualcomm.robotcore.util.Range;
  *                       spin up -> at (target rpm - SEQ_READY_MARGIN_RPM) stop intake and open blocker ->
  *                       3 short intake bursts (with gaps) -> a long 4th burst -> everything off
  */
+@Disabled
 @TeleOp(name = "Shooter Intake Tuner", group = "Tuning")
 public class Shooter_Intake_Tuner extends LinearOpMode {
 

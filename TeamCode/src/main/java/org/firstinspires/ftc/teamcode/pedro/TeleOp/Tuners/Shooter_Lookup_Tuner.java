@@ -4,6 +4,7 @@ import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.LLStatus;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -29,6 +30,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.Position;
  * Distance is the average over all visible goal tags. The rpm is locked when the burst starts.
  * Hardware config name: "limelight".
  */
+@Disabled
 @TeleOp(name = "Shooter Lookup Tuner", group = "Tuning")
 public class Shooter_Lookup_Tuner extends LinearOpMode {
 
