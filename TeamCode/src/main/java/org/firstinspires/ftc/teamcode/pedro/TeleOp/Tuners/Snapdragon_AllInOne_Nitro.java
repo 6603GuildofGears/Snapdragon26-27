@@ -4,6 +4,7 @@ import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -40,6 +41,7 @@ import java.util.List;
  * while you drive. Moving the right stick overrides it; let go and it re-locks onto the most
  * centered CELL. Hardware config name: "limelight". Driving works without it.
  */
+@Disabled
 @TeleOp(name = "Snapdragon All-in-One Nitro")
 public class Snapdragon_AllInOne_Nitro extends LinearOpMode {
 

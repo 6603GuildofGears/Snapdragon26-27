@@ -26,7 +26,7 @@ import java.util.List;
  * Moving the right stick overrides it; let go and it re-locks onto the most centered CELL.
  * Hardware config name: "limelight". Driving works without it; aim-lock is just disabled.
  */
-@TeleOp(name = "Snapdragon Blue")
+@TeleOp(name = "Snapdragon Blue", group = "Snapdragon")
 public class Snapdragon_Blue extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;

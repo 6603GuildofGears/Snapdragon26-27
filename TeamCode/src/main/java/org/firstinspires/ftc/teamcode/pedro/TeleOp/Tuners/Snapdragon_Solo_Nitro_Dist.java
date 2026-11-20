@@ -40,13 +40,14 @@ import java.util.List;
  *
  * Intake distance sensor (hardware config name: "intakeDistance") counts balls: each sudden drop in distance
  * while intaking is one pulse. At 4 the driver's controller rumbles for as long as intake is held.
- * Reversing the intake clears the count and pauses counting; starting a shot clears it and resumes counting.
+ * The sensor never stops the intake. A pulse while reversing removes a ball from the count;
+ * starting a shot clears it.
  *
  * Aim-lock turns the robot to stay pointed at the middle of a BIOBUZZ CELL's 4 AprilTags
  * while you drive. Moving the right stick overrides it; let go and it re-locks onto the most
  * centered CELL. Hardware config name: "limelight". Driving works without it.
  */
-@TeleOp(name = "Snapdragon Solo Nitro - dist")
+@TeleOp(name = "Snapdragon Solo Nitro - dist", group = "Nitro + Dist")
 public class Snapdragon_Solo_Nitro_Dist extends LinearOpMode {
 
     private static final double TICKS_PER_REV = 28.0;
@@ -119,7 +120,8 @@ public class Snapdragon_Solo_Nitro_Dist extends LinearOpMode {
     // ---- Intake distance sensor (ball counter) ----
     static final String DISTANCE_SENSOR_NAME = "intakeDistance";
     static final int    MAX_BALLS            = 4;    // rumble once this many pulses are counted
-    static final double PULSE_DROP_IN        = 1.5;  // a reading this much closer than the last one starts a pulse
+    static final double PULSE_DROP_IN        = 1.5;  // a reading this much closer than the resting distance starts a pulse
+    static final double BASELINE_TAU_SEC     = 0.5;  // how slowly the resting distance follows the readings
     static final double DISTANCE_MAX_IN      = 12.0; // out-of-range readings are clipped to this
 
     private int lockedCell = -1; // -1 = none yet
@@ -233,10 +235,9 @@ public class Snapdragon_Solo_Nitro_Dist extends LinearOpMode {
         double[] appliedStick = new double[3]; // y, x, rx actually sent to the mixer
         double[] rampStart = new double[3];
         int ballCount = 0;
-        boolean countingEnabled = true;
         boolean inPulse = false;
-        double pulseBaselineIn = DISTANCE_MAX_IN;
-        double lastDistanceIn = DISTANCE_MAX_IN;
+        double baselineIn = DISTANCE_MAX_IN;
+        boolean haveBaseline = false;
         boolean rumbling = false;
 
         while (opModeIsActive()) {
@@ -408,9 +409,8 @@ public class Snapdragon_Solo_Nitro_Dist extends LinearOpMode {
             if (rbPressed && !rbWasPressed) {
                 shooterState = shooterState == ShooterState.OFF ? ShooterState.SPINNING_UP : ShooterState.OFF;
                 shooterTimer.reset();
-                // Shooting clears the ball count and resumes counting
+                // Shooting clears the ball count
                 ballCount = 0;
-                countingEnabled = true;
                 // Aim-lock follows the shooter: on when shooting starts, off when it stops
                 if (cameraReady) {
                     aimOn = shooterState != ShooterState.OFF;
@@ -465,34 +465,38 @@ public class Snapdragon_Solo_Nitro_Dist extends LinearOpMode {
                 intake.setPower(0);
             }
 
-            // Ball counting: only while intaking; reversing clears the count and pauses counting until the next shot
+            // Ball counting: a pulse while intaking adds a ball, a pulse while reversing removes one
             boolean intaking = shooterState == ShooterState.OFF && gamepad1.left_bumper;
             boolean reversing = shooterState == ShooterState.OFF && !gamepad1.left_bumper && gamepad1.left_trigger > 0.1;
-            if (reversing) {
-                ballCount = 0;
-                countingEnabled = false;
-            }
 
             double distanceIn = Double.NaN;
             if (distanceSensor != null) {
                 double reading = distanceSensor.getDistance(DistanceUnit.INCH);
                 if (!Double.isNaN(reading)) {
                     distanceIn = Range.clip(reading, 0, DISTANCE_MAX_IN);
-                    // Tracked every loop so resuming counting never sees a stale reading as a drop
-                    if (!inPulse && lastDistanceIn - distanceIn >= PULSE_DROP_IN) {
-                        inPulse = true;
-                        pulseBaselineIn = lastDistanceIn;
-                        if (intaking && countingEnabled) {
-                            ballCount = Math.min(ballCount + 1, MAX_BALLS);
-                        }
-                    } else if (inPulse && distanceIn >= pulseBaselineIn - PULSE_DROP_IN / 2) {
-                        inPulse = false; // back near the pre-pulse distance, ready for the next ball
+                    if (!haveBaseline) {
+                        baselineIn = distanceIn; // start from the resting distance, not an assumed one
+                        haveBaseline = true;
                     }
-                    lastDistanceIn = distanceIn;
+                    // A pulse is a reading well below the resting distance; the resting distance is a slow
+                    // average (frozen during a pulse) so a ball passing in a few loops is never missed
+                    if (!inPulse && distanceIn <= baselineIn - PULSE_DROP_IN) {
+                        inPulse = true;
+                        if (intaking) {
+                            ballCount = Math.min(ballCount + 1, MAX_BALLS);
+                        } else if (reversing) {
+                            ballCount = Math.max(ballCount - 1, 0);
+                        }
+                    } else if (inPulse && distanceIn >= baselineIn - PULSE_DROP_IN / 2) {
+                        inPulse = false; // back near the resting distance, ready for the next ball
+                    }
+                    if (!inPulse) {
+                        baselineIn += (dt / (BASELINE_TAU_SEC + dt)) * (distanceIn - baselineIn);
+                    }
                 }
             }
 
-            // Rumble while full and still holding intake
+            // Rumble while full and still holding intake; the intake itself keeps running
             boolean shouldRumble = ballCount >= MAX_BALLS && intaking;
             if (shouldRumble && !rumbling) {
                 gamepad1.rumble(1.0, 1.0, Gamepad.RUMBLE_DURATION_CONTINUOUS);
@@ -559,8 +563,8 @@ public class Snapdragon_Solo_Nitro_Dist extends LinearOpMode {
             telemetry.addData("Flywheel RPM", "%.0f (target %.0f, ready %.0f to %.0f)", flywheelRpm, shooterRpm, shooterRpm, shooterRpm + SHOOTER_READY_MARGIN_RPM);
             telemetry.addData("Flywheel raw", "%.0f ticks/s | power %.2f", flywheelRpm * TICKS_PER_REV / 60.0, flywheel.getPower());
             telemetry.addData("Flower bar", flowerBarUp ? "UP" : "DOWN");
-            telemetry.addData("Balls", "%d/%d (%s)", ballCount, MAX_BALLS, countingEnabled ? "counting" : "paused until shot");
-            telemetry.addData("Intake distance", distanceSensor == null ? "not configured" : String.format("%.1f in%s", distanceIn, inPulse ? " (pulse)" : ""));
+            telemetry.addData("Balls", "%d/%d", ballCount, MAX_BALLS);
+            telemetry.addData("Intake distance", distanceSensor == null ? "not configured" : String.format("%.1f in (rest %.1f)%s", distanceIn, baselineIn, inPulse ? " (pulse)" : ""));
             telemetry.update();
         }
 
